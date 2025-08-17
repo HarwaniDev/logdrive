@@ -39,6 +39,7 @@ export const authConfig = {
         }
         const email = credentials.email as string;
         const password = credentials.password as string;
+        
         // Find user in database
         const user = await db.user.findUnique({
           where: {
@@ -51,10 +52,10 @@ export const authConfig = {
         }
 
         // Verify password
-        const isValidPassword = bcrypt.compare(
+        const isValidPassword = await bcrypt.compare(
           password,
           user.password
-        );
+        );       
 
         if (!isValidPassword) {
           return null;
@@ -96,6 +97,6 @@ export const authConfig = {
     }),
   },
   pages: {
-    signIn: "/auth/signin", // Custom sign-in page
-  },
+    signIn: "/"
+  }
 } satisfies NextAuthConfig;
