@@ -1,5 +1,5 @@
 import { createTRPCRouter, protectedProcedure } from "~/server/api/trpc";
-import { PutObjectCommand, S3Client } from "@aws-sdk/client-s3";
+import { PutObjectCommand, S3Client, GetObjectCommand } from "@aws-sdk/client-s3";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 import z from "zod";
 // TODO: update when moving to real s3
@@ -18,7 +18,8 @@ export const fileRouter = createTRPCRouter({
     addFolder: protectedProcedure
         .input(
             z.object({
-                folderName: z.string().min(1)
+                folderName: z.string().min(1),
+                parentId: z.string().nullable()
             })
         )
         .mutation(async ({ ctx, input }) => {
@@ -40,7 +41,7 @@ export const fileRouter = createTRPCRouter({
                     data: {
                         name: input.folderName,
                         type: "FOLDER",
-                        parentId: null, // root folder
+                        parentId: input.parentId, // if null, will be stored in root
                         ownerId: ctx.session.user.id,
                     }
                 })
@@ -149,7 +150,37 @@ export const fileRouter = createTRPCRouter({
                     }
                 }
             });
-
             return files;
+        }),
+    getFileUrl: protectedProcedure
+        .input(z.object({
+            fileId: z.string(),
+            download: z.boolean().optional(), // false = preview, true = download
+        }))
+        .mutation(async ({ ctx, input }) => {
+            const file = await ctx.db.file.findFirst({
+                where: {
+                    id: input.fileId,
+                    type: "FILE",
+                    deletedAt: null,
+                },
+            });
+
+            if (!file || !file.s3Key) {
+                throw new Error("file not found");
+            }
+
+            const command = new GetObjectCommand({
+                Bucket: "logdrive",
+                Key: file.s3Key,
+                ResponseContentType: file.mimeType ?? undefined,
+                ResponseContentDisposition: input.download
+                    ? `attachment; filename="${file.name}"`
+                    : undefined,
+            });
+
+            const url = await getSignedUrl(s3, command, { expiresIn: 600 });
+
+            return { url };
         })
 })
