@@ -4,8 +4,13 @@ import { useState, useEffect, useRef } from "react";
 import { useSession, signOut } from "next-auth/react"
 import { api } from "~/trpc/react";
 import { useSearchParams } from "next/navigation";
-// import Link from "next/link";
 import { useRouter } from "next/navigation";
+import Header from "~/app/_components/Header";
+import FoldersSection from "~/app/_components/FoldersSection";
+import FilesSection from "~/app/_components/FilesSection";
+
+
+//TODO: add breadcrumbs
 
 interface FileItem {
     id: string;
@@ -14,6 +19,7 @@ interface FileItem {
     size?: string;
     modified: string;
     icon?: string;
+    s3Key: string;
 }
 
 interface FolderItem {
@@ -39,15 +45,14 @@ export default function Home() {
     const [selectedFile, setSelectedFile] = useState<File | null>(null);
     const [isUploading, setIsUploading] = useState(false);
     const [isCreatingFolder, setIsCreatingFolder] = useState(false);
+    const [openFileMenuId, setOpenFileMenuId] = useState<string | null>(null);
     // TODO:- add upload progress
     // const [uploadProgress, setUploadProgress] = useState(0);
 
-
+    // tRPC queries and mutations
     const { data: rootFiles, refetch: refetchFiles, isLoading: isLoadingFiles } = api.file.getContent.useQuery({
         folderId: folderId ? folderId : null
     })
-    // }
-    // tRPC queries and mutations
 
     const createFolderMutation = api.file.addFolder.useMutation({
         onMutate: () => {
@@ -93,6 +98,8 @@ export default function Home() {
         }
     });
 
+    const getFileUrlMutation = api.file.getFileUrl.useMutation();
+
     // Helper functions
     const handleNewDropdownToggle = () => {
         setShowNewDropdown(!showNewDropdown);
@@ -112,7 +119,8 @@ export default function Home() {
         e.preventDefault();
         if (newFolderName.trim()) {
             createFolderMutation.mutate({
-                folderName: newFolderName.trim()
+                folderName: newFolderName.trim(),
+                parentId: folderId ? folderId : null
             });
         }
     };
@@ -170,6 +178,36 @@ export default function Home() {
         }
     };
 
+    const handlePreviewFile = async (fileId: string) => {
+        try {
+            const { url } = await getFileUrlMutation.mutateAsync({ fileId, download: false });
+            window.open(url, '_blank');
+        } catch (err) {
+            console.error('Failed to get preview URL:', err);
+            alert('Failed to get preview URL.');
+        } finally {
+            setOpenFileMenuId(null);
+        }
+    };
+
+    const handleDownloadFile = async (fileId: string) => {
+        try {
+            const { url } = await getFileUrlMutation.mutateAsync({ fileId, download: true });
+            // Trigger download
+            const link = document.createElement('a');
+            link.href = url;
+            link.download = '';
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+        } catch (err) {
+            console.error('Failed to get download URL:', err);
+            alert('Failed to get download URL.');
+        } finally {
+            setOpenFileMenuId(null);
+        }
+    };
+
     // Helper function to get file icon based on MIME type
     const getFileIcon = (mimeType: string): string => {
         if (mimeType.startsWith('image/')) return '🖼️';
@@ -214,7 +252,8 @@ export default function Home() {
         type: 'file',
         size: file.size ? `${file.size} MB` : 'Unknown',
         modified: file.updatedAt.toLocaleDateString(),
-        icon: getFileIcon(file.mimeType || '')
+        icon: getFileIcon(file.mimeType || ''),
+        s3Key: file.s3Key!
     })) || [];
 
     const filteredFolders = folders.filter(folder =>
@@ -228,64 +267,17 @@ export default function Home() {
     return (
         <div className="min-h-screen bg-gray-50">
             {/* Header */}
-            <header className="bg-white shadow-sm border-b border-gray-200">
-                <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-                    <div className="flex justify-between items-center h-16">
-                        <div className="flex items-center">
-                            <h1 className="text-2xl font-bold text-gray-900">LogDrive</h1>
-                        </div>
-                        <div className="flex items-center space-x-8">
-                            <div className="relative">
-                                <button
-                                    onClick={handleNewDropdownToggle}
-                                    className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg flex items-center space-x-2 transition-colors"
-                                >
-                                    <span className="text-xl">+</span>
-                                    <span>New</span>
-                                </button>
-
-                                {/* Dropdown Menu */}
-                                {showNewDropdown && (
-                                    <div className="absolute right-0 mt-2 w-48 bg-white rounded-md shadow-lg border border-gray-200 z-50">
-                                        <div className="py-1">
-                                            <button
-                                                onClick={handleCreateFolder}
-                                                className="flex items-center px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 w-full text-left"
-                                            >
-                                                <span className="mr-2">📁</span>
-                                                New Folder
-                                            </button>
-                                            <button
-                                                onClick={handleUploadFile}
-                                                className="flex items-center px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 w-full text-left"
-                                            >
-                                                <span className="mr-2">📄</span>
-                                                Upload File
-                                            </button>
-                                        </div>
-                                    </div>
-                                )}
-                            </div>
-                            {session?.user && (
-                                <div className="flex items-center space-x-3">
-                                    <span className="text-sm text-gray-700">
-                                        Welcome, {session.user.name}
-                                    </span>
-                                    <button
-                                        onClick={() => signOut()}
-                                        className="text-gray-600 text-sm hover:text-gray-800 px-3 py-2 cursor-pointer rounded-md hover:bg-gray-100 transition-colors"
-                                    >
-                                        Sign Out
-                                    </button>
-                                </div>
-                            )}
-                        </div>
-                    </div>
-                </div>
-            </header>
+            <Header
+                onToggleNew={handleNewDropdownToggle}
+                onCreateFolder={handleCreateFolder}
+                onUploadFile={handleUploadFile}
+                showNewDropdown={showNewDropdown}
+                userName={session?.user?.name ?? null}
+                onSignOut={() => signOut()}
+            />
 
             {/* Main Content */}
-            <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+            <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8" onClick={() => openFileMenuId && setOpenFileMenuId(null)}>
                 {/* Search and Controls */}
                 <div className="mb-8">
                     <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between space-y-4 sm:space-y-0">
@@ -357,112 +349,19 @@ export default function Home() {
 
                     {/* Folders Section */}
                     {!isLoadingFiles && (
-                        <section>
-                            <h2 className="text-lg font-semibold text-gray-900 mb-4">Folders</h2>
-                            {viewMode === 'grid' ? (
-                                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-4">
-                                    {filteredFolders.map((folder) => (
-                                        <div
-                                            key={folder.id}
-                                            className="group bg-white p-4 rounded-lg border border-gray-200 hover:border-blue-300 hover:shadow-md transition-all cursor-pointer" onClick={() => {
-                                                router.push(`?folderId=${folder.id}`)
-                                            }}
-                                        >
-                                            <div className="flex flex-col items-center text-center">
-                                                <div className="w-16 h-16 bg-blue-100 rounded-lg flex items-center justify-center mb-3 group-hover:bg-blue-200 transition-colors">
-                                                    <span className="text-2xl">📁</span>
-                                                </div>
-                                                <h3 className="font-medium text-gray-900 text-sm truncate w-full">
-                                                    {folder.name}
-                                                </h3>
-                                                <p className="text-xs text-gray-500 mt-1">
-                                                    {folder.itemCount} items
-                                                </p>
-                                            </div>
-                                        </div>
-                                    ))}
-                                </div>
-                            ) : (
-                                <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
-                                    <div className="px-6 py-3 bg-gray-50 border-b border-gray-200">
-                                        <div className="grid grid-cols-12 gap-4 text-sm font-medium text-gray-500">
-                                            <div className="col-span-6">Name</div>
-                                            <div className="col-span-2">Items</div>
-                                            <div className="col-span-4">Modified</div>
-                                        </div>
-                                    </div>
-                                    {filteredFolders.map((folder) => (
-                                        <div
-                                            key={folder.id}
-                                            className="px-6 py-4 border-b border-gray-100 hover:bg-gray-50 cursor-pointer transition-colors"
-                                        >
-                                            <div className="grid grid-cols-12 gap-4 items-center">
-                                                <div className="col-span-6 flex items-center space-x-3">
-                                                    <span className="text-xl">📁</span>
-                                                    <span className="font-medium text-gray-900">{folder.name}</span>
-                                                </div>
-                                                <div className="col-span-2 text-sm text-gray-500">{folder.itemCount} items</div>
-                                                <div className="col-span-4 text-sm text-gray-500">{folder.modified}</div>
-                                            </div>
-                                        </div>
-                                    ))}
-                                </div>
-                            )}
-                        </section>
+                        <FoldersSection viewMode={viewMode} folders={filteredFolders} />
                     )}
 
                     {/* Files Section */}
                     {!isLoadingFiles && (
-                        <section>
-                            <h2 className="text-lg font-semibold text-gray-900 mb-4">Files</h2>
-                            {viewMode === 'grid' ? (
-                                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-4">
-                                    {filteredFiles.map((file) => (
-                                        <div
-                                            key={file.id}
-                                            className="group bg-white p-4 rounded-lg border border-gray-200 hover:border-blue-300 hover:shadow-md transition-all cursor-pointer"
-                                        >
-                                            <div className="flex flex-col items-center text-center">
-                                                <div className="w-16 h-16 bg-gray-100 rounded-lg flex items-center justify-center mb-3 group-hover:bg-gray-200 transition-colors">
-                                                    <span className="text-2xl">{file.icon}</span>
-                                                </div>
-                                                <h3 className="font-medium text-gray-900 text-sm truncate w-full">
-                                                    {file.name}
-                                                </h3>
-                                                <p className="text-xs text-gray-500 mt-1">
-                                                    {file.size}
-                                                </p>
-                                            </div>
-                                        </div>
-                                    ))}
-                                </div>
-                            ) : (
-                                <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
-                                    <div className="px-6 py-3 bg-gray-50 border-b border-gray-200">
-                                        <div className="grid grid-cols-12 gap-4 text-sm font-medium text-gray-500">
-                                            <div className="col-span-6">Name</div>
-                                            <div className="col-span-2">Size</div>
-                                            <div className="col-span-4">Modified</div>
-                                        </div>
-                                    </div>
-                                    {filteredFiles.map((file) => (
-                                        <div
-                                            key={file.id}
-                                            className="px-6 py-4 border-b border-gray-100 hover:bg-gray-50 cursor-pointer transition-colors"
-                                        >
-                                            <div className="grid grid-cols-12 gap-4 items-center">
-                                                <div className="col-span-6 flex items-center space-x-3">
-                                                    <span className="text-xl">{file.icon}</span>
-                                                    <span className="font-medium text-gray-900">{file.name}</span>
-                                                </div>
-                                                <div className="col-span-2 text-sm text-gray-500">{file.size}</div>
-                                                <div className="col-span-4 text-sm text-gray-500">{file.modified}</div>
-                                            </div>
-                                        </div>
-                                    ))}
-                                </div>
-                            )}
-                        </section>
+                        <FilesSection
+                            viewMode={viewMode}
+                            files={filteredFiles}
+                            openFileMenuId={openFileMenuId}
+                            onToggleMenu={(fileId) => setOpenFileMenuId(openFileMenuId === fileId ? null : fileId)}
+                            onPreview={(fileId) => handlePreviewFile(fileId)}
+                            onDownload={(fileId) => handleDownloadFile(fileId)}
+                        />
                     )}
                 </div>
 
