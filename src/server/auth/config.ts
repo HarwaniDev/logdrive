@@ -95,8 +95,15 @@ export const authConfig = {
         role: token.role as UserRole,
       },
     }),
+    redirect: ({ url, baseUrl }) => {
+      // Allows relative callback URLs
+      if (url.startsWith("/")) return `${baseUrl}${url}`;
+      // Allows callback URLs on the same origin
+      else if (new URL(url).origin === baseUrl) return url;
+      return baseUrl;
+    },
   },
   pages: {
-    signIn: "/"
+    signIn: "/signin"
   }
 } satisfies NextAuthConfig;
