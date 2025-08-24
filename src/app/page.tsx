@@ -8,6 +8,7 @@ import { useRouter } from "next/navigation";
 import Header from "~/app/_components/Header";
 import FoldersSection from "~/app/_components/FoldersSection";
 import FilesSection from "~/app/_components/FilesSection";
+import ErrorPage from "~/app/_components/ErrorPage";
 
 
 //TODO: add breadcrumbs
@@ -17,9 +18,10 @@ interface FileItem {
     name: string;
     type: 'file' | 'folder';
     size?: string;
-    modified: string;
+    createdAt: string;
     icon?: string;
     s3Key: string;
+    owner: string;
 }
 
 interface FolderItem {
@@ -46,13 +48,22 @@ export default function Home() {
     const [isUploading, setIsUploading] = useState(false);
     const [isCreatingFolder, setIsCreatingFolder] = useState(false);
     const [openFileMenuId, setOpenFileMenuId] = useState<string | null>(null);
+    const [hasExpiryDate, setHasExpiryDate] = useState(false);
+    const [expiryDate, setExpiryDate] = useState('');
     // TODO:- add upload progress
     // const [uploadProgress, setUploadProgress] = useState(0);
 
     // tRPC queries and mutations
-    const { data: rootFiles, refetch: refetchFiles, isLoading: isLoadingFiles } = api.file.getContent.useQuery({
+    const { data: rootFiles, refetch: refetchFiles, isLoading: isLoadingFiles, error: filesError, isError } = api.file.getContent.useQuery({
         folderId: folderId ? folderId : null
     })
+
+    // Handle query errors
+    useEffect(() => {
+        if (isError) {
+            console.error('Failed to fetch files:', filesError);
+        }
+    }, [isError])
 
     const createFolderMutation = api.file.addFolder.useMutation({
         onMutate: () => {
@@ -70,6 +81,16 @@ export default function Home() {
             alert('Failed to create folder. Please try again.');
         }
     });
+
+    const deleteFileMutation = api.file.deleteFile.useMutation({
+        onSuccess: () => {
+            refetchFiles();
+        },
+        onError: (error) => {
+            console.error("Failed to delete the file:", error);
+            alert("Failed to delete the file");
+        }
+    })
 
     const uploadFileMutation = api.file.addFile.useMutation({
         onSuccess: (data) => {
@@ -90,6 +111,7 @@ export default function Home() {
             setSelectedFile(null);
             setShowFileModal(false);
             refetchFiles(); // Refresh the file list
+            resetExpiryFields(); // Reset expiry fields on successful upload
         },
         onError: (error) => {
             console.error('Failed to confirm upload:', error);
@@ -128,15 +150,35 @@ export default function Home() {
     const handleFileSubmit = (e: React.FormEvent) => {
         e.preventDefault();
         if (selectedFile) {
+            // Validate expiry date if checkbox is checked
+            if (hasExpiryDate) {
+                if (!expiryDate) {
+                    alert('Please select an expiry date.');
+                    return;
+                }
+                
+                const selectedExpiryDate = new Date(expiryDate);
+                const currentDate = new Date();
+                currentDate.setHours(0, 0, 0, 0); // Reset time to start of day for comparison
+                
+                if (selectedExpiryDate < currentDate) {
+                    alert('Expiry date cannot be in the past. Please select a future date.');
+                    return;
+                }
+            }
+
             setIsUploading(true);
             // setUploadProgress(0);
+            const something = selectedFile.size / (1024 * 1024);
+            console.log(something);
 
             // Call tRPC to get upload URL
             uploadFileMutation.mutate({
                 fileName: selectedFile.name,
                 fileType: selectedFile.type || 'application/octet-stream',
-                fileSize: Number((selectedFile.size / (1024 * 1024)).toFixed(2)),
-                folderId: folderId
+                fileSize: (selectedFile.size / (1024 * 1024)),
+                folderId: folderId,
+                expiryDate: hasExpiryDate && expiryDate ? new Date(expiryDate) : undefined
             });
         }
     };
@@ -175,8 +217,21 @@ export default function Home() {
     const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
         if (e.target.files && e.target.files[0]) {
             setSelectedFile(e.target.files[0]);
+            // Reset expiry fields when a new file is selected
+            resetExpiryFields();
         }
     };
+
+    const resetExpiryFields = () => {
+        setHasExpiryDate(false);
+        setExpiryDate('');
+    };
+
+    const handleDelete = (fileId: string) => {
+        deleteFileMutation.mutate({
+            fileId: fileId
+        })
+    }
 
     const handlePreviewFile = async (fileId: string) => {
         try {
@@ -239,22 +294,24 @@ export default function Home() {
     }
 
     // Process real data from backend
-    const folders: FolderItem[] = rootFiles?.filter(item => item.type === 'FOLDER').map(folder => ({
+    const folders: FolderItem[] = Array.isArray(rootFiles) ? rootFiles.filter(item => item.type === 'FOLDER').map(folder => ({
         id: folder.id,
         name: folder.name,
         itemCount: folder._count?.children,
-        modified: folder.updatedAt.toLocaleDateString()
-    })) || [];
+        modified: folder.updatedAt.toLocaleDateString("en-IN")
+    })) : [];
 
-    const files: FileItem[] = rootFiles?.filter(item => item.type === 'FILE').map(file => ({
+    const files: FileItem[] = Array.isArray(rootFiles) ? rootFiles.filter(item => item.type === 'FILE').map(file => ({
         id: file.id,
         name: file.name,
-        type: 'file',
-        size: file.size ? `${file.size} MB` : 'Unknown',
-        modified: file.updatedAt.toLocaleDateString(),
+        type: "file",
+        size: file.size ? `${(file.size).toFixed(2)} MB` : 'Unknown',
+        createdAt: file.createdAt.toLocaleDateString("en-IN"),
         icon: getFileIcon(file.mimeType || ''),
-        s3Key: file.s3Key!
-    })) || [];
+        s3Key: file.s3Key!,
+        owner: file.owner.name,
+        expiryDate: file.expiryDate?.toLocaleDateString("en-IN")
+    })) : [];
 
     const filteredFolders = folders.filter(folder =>
         folder.name.toLowerCase().includes(searchQuery.toLowerCase())
@@ -263,6 +320,8 @@ export default function Home() {
     const filteredFiles = files.filter(file =>
         file.name.toLowerCase().includes(searchQuery.toLowerCase())
     );
+
+
 
     return (
         <div className="min-h-screen bg-gray-50">
@@ -347,13 +406,21 @@ export default function Home() {
                         </div>
                     )}
 
+                    {/* Error State */}
+                    {isError && (
+                        <ErrorPage
+                            error={filesError}
+                            onRetry={refetchFiles}
+                        />
+                    )}
+
                     {/* Folders Section */}
-                    {!isLoadingFiles && (
+                    {!isLoadingFiles && !isError && (
                         <FoldersSection viewMode={viewMode} folders={filteredFolders} />
                     )}
 
                     {/* Files Section */}
-                    {!isLoadingFiles && (
+                    {!isLoadingFiles && !isError && (
                         <FilesSection
                             viewMode={viewMode}
                             files={filteredFiles}
@@ -361,6 +428,7 @@ export default function Home() {
                             onToggleMenu={(fileId) => setOpenFileMenuId(openFileMenuId === fileId ? null : fileId)}
                             onPreview={(fileId) => handlePreviewFile(fileId)}
                             onDownload={(fileId) => handleDownloadFile(fileId)}
+                            onDelete={(fileId) => handleDelete(fileId)}
                         />
                     )}
                 </div>
@@ -377,7 +445,7 @@ export default function Home() {
                 )}
 
                 {/* No Files State */}
-                {!isLoadingFiles && !searchQuery && filteredFolders.length === 0 && filteredFiles.length === 0 && (
+                {!isError && !isLoadingFiles && !searchQuery && filteredFolders.length === 0 && filteredFiles.length === 0 && (
                     <div className="text-center py-12">
                         <span className="text-4xl">📁</span>
                         <h3 className="mt-2 text-sm font-medium text-gray-900">No files or folders yet</h3>
@@ -451,7 +519,10 @@ export default function Home() {
                         <div className="flex items-center justify-between mb-4">
                             <h3 className="text-lg font-semibold text-gray-900">Upload File</h3>
                             <button
-                                onClick={() => setShowFileModal(false)}
+                                onClick={() => {
+                                    setShowFileModal(false);
+                                    resetExpiryFields();
+                                }}
                                 className="text-gray-400 hover:text-gray-600 text-xl"
                             >
                                 ×
@@ -481,11 +552,49 @@ export default function Home() {
                                         )}
                                     </label>
                                 </div>
+                                
+                                {/* Expiry Date Section */}
+                                <div className="mb-4">
+                                    <label className="flex items-center space-x-2 cursor-pointer">
+                                        <input 
+                                            type="checkbox" 
+                                            checked={hasExpiryDate}
+                                            onChange={(e) => setHasExpiryDate(e.target.checked)}
+                                            className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                                        />
+                                        <span className="text-sm font-medium text-gray-700">
+                                            Has expiry date?
+                                        </span>
+                                    </label>
+                                    
+                                    {hasExpiryDate && (
+                                        <div className="mt-3">
+                                            <label htmlFor="expiryDate" className="block text-sm font-medium text-gray-700 mb-2">
+                                                Expiry Date
+                                            </label>
+                                            <input
+                                                type="date"
+                                                id="expiryDate"
+                                                value={expiryDate}
+                                                onChange={(e) => setExpiryDate(e.target.value)}
+                                                min={new Date().toISOString().split('T')[0]}
+                                                className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+                                                required={hasExpiryDate}
+                                            />
+                                            <p className="text-xs text-gray-500 mt-1">
+                                                Select a future date for document expiry
+                                            </p>
+                                        </div>
+                                    )}
+                                </div>
                             </div>
                             <div className="flex justify-end space-x-3">
                                 <button
                                     type="button"
-                                    onClick={() => setShowFileModal(false)}
+                                    onClick={() => {
+                                        setShowFileModal(false);
+                                        resetExpiryFields();
+                                    }}
                                     className="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-md transition-colors"
                                 >
                                     Cancel
