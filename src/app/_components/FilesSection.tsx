@@ -10,6 +10,7 @@ export interface FileItemProps {
 	icon?: string;
 	s3Key: string;
 	owner: string;
+	expiryDate?: string;
 }
 
 interface FilesSectionProps {
@@ -113,10 +114,11 @@ export default function FilesSection({
 			) : (
 				<div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
 					<div className="px-6 py-3 bg-gray-50 border-b border-gray-200">
-						<div className="grid grid-cols-12 gap-4 text-sm font-medium text-gray-500">
+						<div className="grid grid-cols-16 gap-4 text-sm font-medium text-gray-500">
 							<div className="col-span-6">Name</div>
 							<div className="col-span-2">Size</div>
 							<div className="col-span-4">Created on</div>
+							<div className="col-span-4">Expiry date</div>
 						</div>
 					</div>
 					{files.map((file) => (
@@ -128,13 +130,14 @@ export default function FilesSection({
 								onToggleMenu(file.id);
 							}}
 						>
-							<div className="grid grid-cols-12 gap-4 items-center">
+							<div className="grid grid-cols-16 gap-4 items-center">
 								<div className="col-span-6 flex items-center space-x-3">
 									<span className="text-xl">{file.icon}</span>
 									<span className="font-medium text-gray-900">{file.name}</span>
 								</div>
 								<div className="col-span-2 text-sm text-gray-500">{file.size}</div>
 								<div className="col-span-4 text-sm text-gray-500">{file.createdAt}</div>
+								{file.expiryDate ? <div className="col-span-4 text-sm text-gray-500">{file.expiryDate}</div> : <div className="col-span-2 text-sm text-gray-500">-</div>}
 							</div>
 
 							{openFileMenuId === file.id && (
