@@ -2,6 +2,8 @@ import { createTRPCRouter, protectedProcedure } from "~/server/api/trpc";
 import { PutObjectCommand, S3Client, GetObjectCommand } from "@aws-sdk/client-s3";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 import z from "zod";
+import { TRPCError } from "@trpc/server";
+
 // TODO: update when moving to real s3
 const s3 = new S3Client({
     region: "us-east-1",
@@ -32,7 +34,7 @@ export const fileRouter = createTRPCRouter({
                 Body: "", // just empty string
             });
 
-            await Promise.all([
+            const [_, file] = await Promise.all([
                 // send command to s3
                 s3.send(command),
 
@@ -44,8 +46,16 @@ export const fileRouter = createTRPCRouter({
                         parentId: input.parentId, // if null, will be stored in root
                         ownerId: ctx.session.user.id,
                     }
-                })
+                }),
             ]);
+
+            await ctx.db.activityLog.create({
+                data: {
+                    userId: ctx.session.user.id,
+                    fileId: file.id,
+                    action: "CREATE_FOLDER"
+                }
+            });
             return {
                 success: true
             }
@@ -58,7 +68,8 @@ export const fileRouter = createTRPCRouter({
             fileName: z.string().min(1),
             fileType: z.string(),
             fileSize: z.number(),
-            folderId: z.string().nullable(),       // folderId === null for root 
+            folderId: z.string().nullable(),       // folderId === null for root
+            expiryDate: z.date().optional()
         }))
         .mutation(async ({ ctx, input }) => {
             let key;
@@ -96,8 +107,9 @@ export const fileRouter = createTRPCRouter({
                         parentId: input.folderId,
                         s3Key: key,
                         mimeType: input.fileType,
-                        // size: input.fileSize,
+                        size: input.fileSize,
                         ownerId: ctx.session.user.id,
+                        expiryDate: input.expiryDate ?? null
                     }
                 })
             ]);
@@ -112,15 +124,20 @@ export const fileRouter = createTRPCRouter({
             fileId: z.string()
         }))
         .mutation(async ({ ctx, input }) => {
-            console.log("confirm upload");
-            console.log(input.fileId);
-
-            await ctx.db.file.update({
+            const file = await ctx.db.file.update({
                 where: {
                     id: input.fileId
                 },
                 data: {
                     status: input.isUploaded === true ? "ACTIVE" : "FAILED"
+                }
+            });
+
+            await ctx.db.activityLog.create({
+                data: {
+                    userId: ctx.session.user.id,
+                    fileId: file.id,
+                    action: "UPLOAD"
                 }
             });
             return {
@@ -132,6 +149,19 @@ export const fileRouter = createTRPCRouter({
             folderId: z.string().nullable(), // null = root
         }))
         .query(async ({ ctx, input }) => {
+
+            if (input.folderId) {
+                const file = await ctx.db.file.findUnique({
+                    where: {
+                        id: input.folderId,
+                        showFile: true
+                    }
+                })
+                if (!file) {
+                    throw new TRPCError({ code: "BAD_REQUEST" })
+                }
+            }
+
             const files = await ctx.db.file.findMany({
                 where: {
                     parentId: input.folderId,
@@ -146,6 +176,11 @@ export const fileRouter = createTRPCRouter({
                     _count: {
                         select: {
                             children: true
+                        }
+                    },
+                    owner: {
+                        select: {
+                            name: true
                         }
                     }
                 }
@@ -162,12 +197,12 @@ export const fileRouter = createTRPCRouter({
                 where: {
                     id: input.fileId,
                     type: "FILE",
-                    deletedAt: null,
+                    showFile: true,
                 },
             });
 
             if (!file || !file.s3Key) {
-                throw new Error("file not found");
+                throw new TRPCError({ message: "file not found", code: "NOT_FOUND" });
             }
 
             const command = new GetObjectCommand({
@@ -179,8 +214,101 @@ export const fileRouter = createTRPCRouter({
                     : undefined,
             });
 
-            const url = await getSignedUrl(s3, command, { expiresIn: 600 });
+            const [url, _] = await Promise.all([
+                getSignedUrl(s3, command, { expiresIn: 600 }),
+                await ctx.db.activityLog.create({
+                    data: {
+                        userId: ctx.session.user.id,
+                        fileId: file.id,
+                        action: input.download ? "DOWNLOAD" : "PREVIEW"
+                    }
+                })
+            ]);
 
             return { url };
+        }),
+    deleteFile: protectedProcedure
+        .input(z.object({
+            fileId: z.string()
+        }))
+        .mutation(async ({ ctx, input }) => {
+            const file = await ctx.db.file.findUnique({
+                where: {
+                    id: input.fileId,
+                    type: "FILE"
+                }
+            });
+            if (!file) {
+                throw new TRPCError({ code: "NOT_FOUND", cause: "Cannot find provided fileId or the fileId is associated with a folder" });
+            };
+            await Promise.all([
+                ctx.db.file.update({
+                    where: {
+                        id: input.fileId
+                    },
+                    data: {
+                        showFile: false,
+                        deletedAt: new Date()
+                    }
+                }),
+                ctx.db.activityLog.create({
+                    data: {
+                        userId: ctx.session.user.id,
+                        fileId: input.fileId,
+                        action: "DELETE"
+                    }
+                })
+            ]);
+            return {
+                message: "file deleted successfully"
+            }
+        }),
+    getTrashContent: protectedProcedure
+        .query(async ({ ctx }) => {
+            const files = await ctx.db.file.findMany({
+                where: {
+                    deletedAt: { not: null },
+                    type: { not: "FOLDER" }
+                },
+                orderBy: [
+                    { type: "desc" },
+                    { name: "asc" }     // alphabetically
+                ],
+                include: {
+                    _count: {
+                        select: {
+                            children: true
+                        }
+                    }
+                }
+            });
+            return files;
+        }),
+    restoreFile: protectedProcedure
+        .input(z.object({
+            fileId: z.string()
+        }))
+        .mutation(async ({ ctx, input }) => {
+            const file = await ctx.db.file.findUnique({
+                where: {
+                    id: input.fileId
+                }
+            });
+            if (!file) {
+                throw new TRPCError({ code: "BAD_REQUEST", message: "fileId not found or is invalid" })
+            }
+            await ctx.db.file.update({
+                where: {
+                    id: input.fileId
+                },
+                data: {
+                    deletedAt: null,
+                    showFile: true
+                }
+            })
+
+            return {
+                message: "file restored successfully"
+            }
         })
 })

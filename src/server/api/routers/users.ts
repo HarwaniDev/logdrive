@@ -1,6 +1,7 @@
 import z from "zod";
 import { createTRPCRouter, protectedProcedure } from "../trpc";
 import bcrypt from "bcryptjs";
+import { TRPCError } from "@trpc/server";
 
 export const userRouter = createTRPCRouter({
     addUser: protectedProcedure
@@ -42,5 +43,26 @@ export const userRouter = createTRPCRouter({
                 name: newUser.name,
                 email: newUser.email,
             }
+        }),
+    getEmployees: protectedProcedure
+        .query(async ({ ctx }) => {
+            if (ctx.session.user.role !== "admin") {
+                throw new TRPCError({ message: "Only admin has access to view all activity logs", code: "UNAUTHORIZED" });
+            }
+
+            const users = await ctx.db.user.findMany({
+                where: {
+                    role: {
+                        not: "admin"
+                    }
+                },
+                select: {
+                    id: true,
+                    name: true,
+                    role: true,
+                    email: true
+                }
+            });
+            return users;
         })
 })
