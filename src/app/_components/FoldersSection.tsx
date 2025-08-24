@@ -47,7 +47,7 @@ export default function FoldersSection({ viewMode, folders }: FoldersSectionProp
 						<div className="grid grid-cols-12 gap-4 text-sm font-medium text-gray-500">
 							<div className="col-span-6">Name</div>
 							<div className="col-span-2">Items</div>
-							<div className="col-span-4">Modified</div>
+							<div className="col-span-4">Created on</div>
 						</div>
 					</div>
 					{folders.map((folder) => (

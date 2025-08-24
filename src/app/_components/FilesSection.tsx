@@ -6,9 +6,10 @@ export interface FileItemProps {
 	id: string;
 	name: string;
 	size?: string;
-	modified: string;
+	createdAt: string;
 	icon?: string;
 	s3Key: string;
+	owner: string;
 }
 
 interface FilesSectionProps {
@@ -16,8 +17,11 @@ interface FilesSectionProps {
 	files: FileItemProps[];
 	openFileMenuId: string | null;
 	onToggleMenu: (fileId: string) => void;
-	onPreview: (fileId: string) => void;
-	onDownload: (fileId: string) => void;
+	onPreview?: (fileId: string) => void;
+	onDownload?: (fileId: string) => void;
+	onDelete?: (fileId: string) => void;
+	onRestore?: (fileId: string) => void;
+	isTrash?: boolean;
 }
 
 export default function FilesSection({
@@ -27,6 +31,9 @@ export default function FilesSection({
 	onToggleMenu,
 	onPreview,
 	onDownload,
+	onDelete,
+	onRestore,
+	isTrash = false
 }: FilesSectionProps) {
 	return (
 		<section>
@@ -47,30 +54,56 @@ export default function FilesSection({
 									<span className="text-2xl">{file.icon}</span>
 								</div>
 								<h3 className="font-medium text-gray-900 text-sm truncate w-full">{file.name}</h3>
-								<p className="text-xs text-gray-500 mt-1">{file.size}</p>
+								<p className="text-xs text-gray-500 mt-1">{file.owner} | {file.createdAt} | {file.size}</p>
 							</div>
 
 							{openFileMenuId === file.id && (
 								<div className="absolute right-2 top-2 z-50 w-40 bg-white rounded-md shadow-lg border border-gray-200">
 									<div className="py-1">
-										<button
-											onClick={(e) => {
-												e.stopPropagation();
-												onPreview(file.id);
-											}}
-											className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
-										>
-											Preview
-										</button>
-										<button
-											onClick={(e) => {
-												e.stopPropagation();
-												onDownload(file.id);
-											}}
-											className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
-										>
-											Download
-										</button>
+										{!isTrash && onPreview && (
+											<button
+												onClick={(e) => {
+													e.stopPropagation();
+													onPreview(file.id);
+												}}
+												className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
+											>
+												Preview
+											</button>
+										)}
+										{!isTrash && onDownload && (
+											<button
+												onClick={(e) => {
+													e.stopPropagation();
+													onDownload(file.id);
+												}}
+												className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
+											>
+												Download
+											</button>
+										)}
+										{!isTrash && onDelete && (
+											<button
+												onClick={(e) => {
+													e.stopPropagation();
+													onDelete(file.id);
+												}}
+												className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
+											>
+												Move to trash
+											</button>
+										)}
+										{isTrash && onRestore && (
+											<button
+												onClick={(e) => {
+													e.stopPropagation();
+													onRestore(file.id);
+												}}
+												className="w-full text-left px-4 py-2 text-sm text-green-700 hover:bg-green-50"
+											>
+												Restore file
+											</button>
+										)}
 									</div>
 								</div>
 							)}
@@ -83,7 +116,7 @@ export default function FilesSection({
 						<div className="grid grid-cols-12 gap-4 text-sm font-medium text-gray-500">
 							<div className="col-span-6">Name</div>
 							<div className="col-span-2">Size</div>
-							<div className="col-span-4">Modified</div>
+							<div className="col-span-4">Created on</div>
 						</div>
 					</div>
 					{files.map((file) => (
@@ -101,30 +134,56 @@ export default function FilesSection({
 									<span className="font-medium text-gray-900">{file.name}</span>
 								</div>
 								<div className="col-span-2 text-sm text-gray-500">{file.size}</div>
-								<div className="col-span-4 text-sm text-gray-500">{file.modified}</div>
+								<div className="col-span-4 text-sm text-gray-500">{file.createdAt}</div>
 							</div>
 
 							{openFileMenuId === file.id && (
 								<div className="absolute right-4 top-2 z-50 w-40 bg-white rounded-md shadow-lg border border-gray-200">
 									<div className="py-1">
-										<button
-											onClick={(e) => {
-												e.stopPropagation();
-												onPreview(file.id);
-											}}
-											className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
-										>
-											Preview
-										</button>
-										<button
-											onClick={(e) => {
-												e.stopPropagation();
-												onDownload(file.id);
-											}}
-											className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
-										>
-											Download
-										</button>
+										{!isTrash && onPreview && (
+											<button
+												onClick={(e) => {
+													e.stopPropagation();
+													onPreview(file.id);
+												}}
+												className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
+											>
+												Preview
+											</button>
+										)}
+										{!isTrash && onDownload && (
+											<button
+												onClick={(e) => {
+													e.stopPropagation();
+													onDownload(file.id);
+												}}
+												className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
+											>
+												Download
+											</button>
+										)}
+										{!isTrash && onDelete && (
+											<button
+												onClick={(e) => {
+													e.stopPropagation();
+													onDelete(file.id);
+												}}
+												className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
+											>
+												Move to trash
+											</button>
+										)}
+										{isTrash && onRestore && (
+											<button
+												onClick={(e) => {
+													e.stopPropagation();
+													onRestore(file.id);
+												}}
+												className="w-full text-left px-4 py-2 text-sm text-green-700 hover:bg-green-50"
+											>
+												Restore file
+											</button>
+										)}
 									</div>
 								</div>
 							)}
