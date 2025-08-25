@@ -60,6 +60,27 @@ export const fileRouter = createTRPCRouter({
                 success: true
             }
         }),
+    getExpiryContent: protectedProcedure
+        .query(async ({ ctx }) => {
+            const files = await ctx.db.file.findMany({
+                where: {
+                    deletedAt: null,
+                    type: { not: "FOLDER" },
+                    expiryDate: { not: null }
+                },
+                orderBy: [
+                    { name: "asc" }
+                ],
+                include: {
+                    owner: {
+                        select: {
+                            name: true
+                        }
+                    }
+                }
+            });
+            return files;
+        }),
 
     // TODO:- check for scenario when same name files are uploaded to root or in a same folder.
     // TODO:- see how can we add filesize to db.
