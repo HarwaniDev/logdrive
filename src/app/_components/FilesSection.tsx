@@ -23,6 +23,7 @@ interface FilesSectionProps {
 	onDelete?: (fileId: string) => void;
 	onRestore?: (fileId: string) => void;
 	isTrash?: boolean;
+	showExpiry?: boolean;
 }
 
 export default function FilesSection({
@@ -34,14 +35,28 @@ export default function FilesSection({
 	onDownload,
 	onDelete,
 	onRestore,
-	isTrash = false
+	isTrash = false,
+	showExpiry = false
 }: FilesSectionProps) {
+	const sortedFiles = files.sort((a, b) => {
+		if (a.expiryDate && b.expiryDate) {
+			const [dayA, monthA, yearA] = a.expiryDate.split("/").map(Number);
+			const [dayB, monthB, yearB] = b.expiryDate.split("/").map(Number);
+
+			const dateA = new Date(yearA!, monthA! - 1, dayA).getTime();
+			const dateB = new Date(yearB!, monthB! - 1, dayB).getTime();
+
+			return dateA - dateB;
+		} else {
+			return 0;
+		}
+	});
 	return (
 		<section>
 			<h2 className="text-lg font-semibold text-gray-900 mb-4">Files</h2>
 			{viewMode === "grid" ? (
 				<div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-4">
-					{files.map((file) => (
+					{sortedFiles.map((file) => (
 						<div
 							key={file.id}
 							className="group relative bg-white p-4 rounded-lg border border-gray-200 hover:border-blue-300 hover:shadow-md transition-all cursor-pointer"
@@ -56,6 +71,7 @@ export default function FilesSection({
 								</div>
 								<h3 className="font-medium text-gray-900 text-sm truncate w-full">{file.name}</h3>
 								<p className="text-xs text-gray-500 mt-1">{file.owner} | {file.createdAt} | {file.size}</p>
+								<p className="text-xs text-gray-900 mt-1 font-bold">{showExpiry && file.expiryDate ? `Exp: ${file.expiryDate}` : ""}</p>
 							</div>
 
 							{openFileMenuId === file.id && (

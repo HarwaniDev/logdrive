@@ -1,21 +1,85 @@
 generator client {
-    provider = "prisma-client-js"
+  provider = "prisma-client-js"
 }
 
 datasource db {
-    provider = "postgresql"
-    url      = env("DATABASE_URL")
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
 }
 
 model User {
-    id            String    @id @default(cuid())
-    name          String?
-    email         String   @unique
-    password      String
-    role          UserRole
+  id         String        @id @default(cuid())
+  name       String
+  email      String        @unique
+  password   String
+  files      File[]
+  activities ActivityLog[]
+  role       UserRole
+  createdAt  DateTime      @default(now())
+}
+
+model File {
+  id       String   @id @default(cuid())
+  name     String
+  type     FileType
+  parentId String? // NULL = root
+  parent   File?    @relation("FolderChildren", fields: [parentId], references: [id])
+  children File[]   @relation("FolderChildren")
+
+  // If it's a file
+  s3Key    String? // e.g. "user123/docs/file.pdf"
+  mimeType String?
+  size     Float?
+  status   FileStatus @default(PENDING)
+
+  // Relations
+  ownerId   String
+  owner     User          @relation(fields: [ownerId], references: [id])
+  activites ActivityLog[]
+
+  showFile   Boolean   @default(true)
+  deletedAt  DateTime?
+  expiryDate DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model ActivityLog {
+  id     String @id @default(cuid())
+  userId String
+  user   User   @relation(fields: [userId], references: [id])
+
+  fileId String
+  file   File   @relation(fields: [fileId], references: [id])
+
+  action    ActivityType
+  timestamp DateTime     @default(now())
+
+  userAgent String?
+}
+
+enum ActivityType {
+  UPLOAD
+  DOWNLOAD
+  PREVIEW
+  DELETE
+  RENAME
+  CREATE_FOLDER
+}
+
+enum FileStatus {
+  PENDING
+  ACTIVE
+  FAILED
+}
+
+enum FileType {
+  FILE
+  FOLDER
 }
 
 enum UserRole {
-    employee
-    admin
+  employee
+  admin
 }

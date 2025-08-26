@@ -60,13 +60,16 @@ export const fileRouter = createTRPCRouter({
                 success: true
             }
         }),
-    getExpiryContent: protectedProcedure
+    getExpiredContent: protectedProcedure
         .query(async ({ ctx }) => {
+            const now = new Date();
             const files = await ctx.db.file.findMany({
                 where: {
-                    deletedAt: null,
+                    showFile: true,
                     type: { not: "FOLDER" },
-                    expiryDate: { not: null }
+                    expiryDate: {
+                        lt: now
+                    }
                 },
                 orderBy: [
                     { name: "asc" }
@@ -81,7 +84,33 @@ export const fileRouter = createTRPCRouter({
             });
             return files;
         }),
-
+    getFilesExpiringWithinAMonth: protectedProcedure
+        .query(async ({ ctx }) => {
+            const now = new Date();
+            const oneMonthLater = new Date();
+            oneMonthLater.setMonth(oneMonthLater.getMonth() + 1);
+            const files = await ctx.db.file.findMany({
+                where: {
+                    showFile: true,
+                    type: { not: "FOLDER" },
+                    expiryDate: {
+                        gte: now,
+                        lte: oneMonthLater
+                    }
+                },
+                orderBy: [
+                    { name: "asc" }
+                ],
+                include: {
+                    owner: {
+                        select: {
+                            name: true
+                        }
+                    }
+                }
+            });
+            return files;
+        }),
     // TODO:- check for scenario when same name files are uploaded to root or in a same folder.
     // TODO:- see how can we add filesize to db.
     addFile: protectedProcedure

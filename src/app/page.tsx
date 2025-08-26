@@ -6,6 +6,7 @@ import { api } from "~/trpc/react";
 import { useSearchParams } from "next/navigation";
 import { useRouter } from "next/navigation";
 import Header from "~/app/_components/Header";
+import Link from "next/link";
 import FoldersSection from "~/app/_components/FoldersSection";
 import FilesSection from "~/app/_components/FilesSection";
 import ErrorPage from "~/app/_components/ErrorPage";
@@ -22,6 +23,7 @@ interface FileItem {
     icon?: string;
     s3Key: string;
     owner: string;
+    expiryDate?: string;
 }
 
 interface FolderItem {
@@ -50,6 +52,8 @@ export default function Home() {
     const [openFileMenuId, setOpenFileMenuId] = useState<string | null>(null);
     const [hasExpiryDate, setHasExpiryDate] = useState(false);
     const [expiryDate, setExpiryDate] = useState('');
+    const [showExpiryBanner, setShowExpiryBanner] = useState(true);
+
     // TODO:- add upload progress
     // const [uploadProgress, setUploadProgress] = useState(0);
 
@@ -57,6 +61,10 @@ export default function Home() {
     const { data: rootFiles, refetch: refetchFiles, isLoading: isLoadingFiles, error: filesError, isError } = api.file.getContent.useQuery({
         folderId: folderId ? folderId : null
     })
+
+    // expiry related queries
+    const { data: expiredFiles } = api.file.getExpiredContent.useQuery();
+    const { data: expiringSoonFiles } = api.file.getFilesExpiringWithinAMonth.useQuery();
 
     // Handle query errors
     useEffect(() => {
@@ -156,11 +164,11 @@ export default function Home() {
                     alert('Please select an expiry date.');
                     return;
                 }
-                
+
                 const selectedExpiryDate = new Date(expiryDate);
                 const currentDate = new Date();
                 currentDate.setHours(0, 0, 0, 0); // Reset time to start of day for comparison
-                
+
                 if (selectedExpiryDate < currentDate) {
                     alert('Expiry date cannot be in the past. Please select a future date.');
                     return;
@@ -310,7 +318,7 @@ export default function Home() {
         icon: getFileIcon(file.mimeType || ''),
         s3Key: file.s3Key!,
         owner: file.owner.name,
-        expiryDate: file.expiryDate?.toLocaleDateString("en-IN")
+        expiryDate: file.expiryDate ? file.expiryDate.toLocaleDateString("en-IN") : undefined
     })) : [];
 
     const filteredFolders = folders.filter(folder =>
@@ -339,6 +347,23 @@ export default function Home() {
             <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8" onClick={() => openFileMenuId && setOpenFileMenuId(null)}>
                 {/* Search and Controls */}
                 <div className="mb-8">
+                    {/* Expiry Warning Banner */}
+                    {!!((expiredFiles?.length || 0) + (expiringSoonFiles?.length || 0)) && showExpiryBanner && (
+                        <div className="mb-4">
+                            <div className="block w-full">
+                                <div className="w-full border border-red-200 bg-red-50 text-red-800 px-4 py-3 rounded-lg flex items-center justify-between cursor-pointer">
+                                    <div onClick={() => {router.push("/expiry")}}>
+                                        <span className="font-semibold">Warning:</span> You have {(expiringSoonFiles?.length || 0)} file(s) expiring within a month and {(expiredFiles?.length || 0)} file(s) already expired. Click to review.
+                                    </div>
+                                    <button className="cursor-pointer" onClick={() => {
+                                        setShowExpiryBanner(false);
+                                    }}>
+                                        X
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    )}
                     <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between space-y-4 sm:space-y-0">
                         {/* Search Bar */}
                         <div className="relative flex-1 max-w-lg">
@@ -552,12 +577,12 @@ export default function Home() {
                                         )}
                                     </label>
                                 </div>
-                                
+
                                 {/* Expiry Date Section */}
                                 <div className="mb-4">
                                     <label className="flex items-center space-x-2 cursor-pointer">
-                                        <input 
-                                            type="checkbox" 
+                                        <input
+                                            type="checkbox"
                                             checked={hasExpiryDate}
                                             onChange={(e) => setHasExpiryDate(e.target.checked)}
                                             className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
@@ -566,7 +591,7 @@ export default function Home() {
                                             Has expiry date?
                                         </span>
                                     </label>
-                                    
+
                                     {hasExpiryDate && (
                                         <div className="mt-3">
                                             <label htmlFor="expiryDate" className="block text-sm font-medium text-gray-700 mb-2">
