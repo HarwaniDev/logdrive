@@ -2,8 +2,8 @@ import "~/styles/globals.css";
 
 import { type Metadata } from "next";
 import { Geist } from "next/font/google";
-
 import { TRPCReactProvider } from "~/trpc/react";
+import { Toaster } from "react-hot-toast";
 import Providers from "./providers";
 
 export const metadata: Metadata = {
@@ -23,7 +23,10 @@ export default function RootLayout({
     <html lang="en" className={`${geist.variable}`}>
       <body>
         <Providers>
-          <TRPCReactProvider>{children}</TRPCReactProvider>
+          <TRPCReactProvider>
+            <Toaster />            
+              {children}
+          </TRPCReactProvider>
         </Providers>
       </body>
     </html>
