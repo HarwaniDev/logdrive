@@ -347,7 +347,7 @@ export const fileRouter = createTRPCRouter({
             if (!file) {
                 throw new TRPCError({ code: "BAD_REQUEST", message: "fileId not found or is invalid" })
             }
-            await ctx.db.file.update({
+            await Promise.all([ctx.db.file.update({
                 where: {
                     id: input.fileId
                 },
@@ -355,10 +355,50 @@ export const fileRouter = createTRPCRouter({
                     deletedAt: null,
                     showFile: true
                 }
-            })
+            }),
+            ctx.db.activityLog.create({
+                data: {
+                    userId: ctx.session.user.id,
+                    fileId: input.fileId,
+                    action: "RESTORE"
+                }
+            })])
 
             return {
                 message: "file restored successfully"
+            }
+        }),
+    updateExpiryDate: protectedProcedure
+        .input(z.object({
+            fileId: z.string(),
+            newExpiryDate: z.date()
+        }))
+        .mutation(async ({ ctx, input }) => {
+            const file = await ctx.db.file.findUnique({
+                where: {
+                    id: input.fileId
+                }
+            });
+            if (!file) {
+                throw new TRPCError({ message: "file not found or invalid fileId", code: "NOT_FOUND" });
+            };
+
+            const today = new Date();
+            if (input.newExpiryDate < today) {
+                throw new TRPCError({ message: "expiry date cannot be set to a date previous than today's date", code: "BAD_REQUEST" });
+            }
+
+            const _ = await ctx.db.file.update({
+                where: {
+                    id: input.fileId
+                },
+                data: {
+                    expiryDate: input.newExpiryDate
+                }
+            });
+
+            return {
+                message: "expiry date updated successfully"
             }
         })
 })
