@@ -10,6 +10,7 @@ import Link from "next/link";
 import FoldersSection from "~/app/_components/FoldersSection";
 import FilesSection from "~/app/_components/FilesSection";
 import ErrorPage from "~/app/_components/ErrorPage";
+import toast from "react-hot-toast";
 
 
 //TODO: add breadcrumbs
@@ -53,6 +54,9 @@ export default function Home() {
     const [hasExpiryDate, setHasExpiryDate] = useState(false);
     const [expiryDate, setExpiryDate] = useState('');
     const [showExpiryBanner, setShowExpiryBanner] = useState(true);
+    const [showExpiryUpdateModal, setShowExpiryUpdateModal] = useState(false);
+    const [updatingFileId, setUpdatingFileId] = useState<string | null>(null);
+    const [newExpiryDate, setNewExpiryDate] = useState('');
 
     // TODO:- add upload progress
     // const [uploadProgress, setUploadProgress] = useState(0);
@@ -63,72 +67,128 @@ export default function Home() {
     })
 
     // expiry related queries
-    const { data: expiredFiles } = api.file.getExpiredContent.useQuery();
-    const { data: expiringSoonFiles } = api.file.getFilesExpiringWithinAMonth.useQuery();
+    const { data: expiredFiles, refetch: refetchExpiryFiles, isError: expiredContentError } = api.file.getExpiredContent.useQuery();
+    const { data: expiringSoonFiles, refetch: refetchSoonExpiryFiles, isError: expiringError } = api.file.getFilesExpiringWithinAMonth.useQuery();
 
     // Handle query errors
+    // TODO: handle errors
     useEffect(() => {
         if (isError) {
-            console.error('Failed to fetch files:', filesError);
+            toast.error('Failed to fetch files');
         }
-    }, [isError])
+
+        if (expiredContentError || expiringError) {
+            toast.error('Failed to fetch expiring files details');
+        }
+    }, [isError, expiredContentError, expiringError])
 
     const createFolderMutation = api.file.addFolder.useMutation({
         onMutate: () => {
+            const id = toast.loading("Creating folder");
             setIsCreatingFolder(true);
+            return { toastId: id };
         },
-        onSuccess: () => {
+        onSuccess: (_data, _variables, context) => {
             setNewFolderName('');
             setShowFolderModal(false);
             setIsCreatingFolder(false);
             refetchFiles(); // Refresh the file list
+            toast.success("Folder created successfully", {
+                id: context.toastId
+            });
         },
-        onError: (error) => {
-            console.error('Failed to create folder:', error);
+        onError: (error, _variables, context) => {
             setIsCreatingFolder(false);
-            alert('Failed to create folder. Please try again.');
+            toast.error('Failed to create folder. Please try again.', {
+                id: context?.toastId
+            });
         }
     });
 
     const deleteFileMutation = api.file.deleteFile.useMutation({
-        onSuccess: () => {
-            refetchFiles();
+        onMutate: () => {
+            const id = toast.loading("Deleting file");
+            return { toastId: id };
         },
-        onError: (error) => {
-            console.error("Failed to delete the file:", error);
-            alert("Failed to delete the file");
+        onSuccess: (_data, _variables, context) => {
+            refetchFiles();
+            toast.success("File deleted successfully", {
+                id: context.toastId
+            });
+        },
+        onError: (error, _variables, context) => {
+            toast.error("Failed to delete the file. Please try again.", {
+                id: context?.toastId
+            });
         }
-    })
+    });
 
     const uploadFileMutation = api.file.addFile.useMutation({
-        onSuccess: (data) => {
+        onMutate: () => {
+            const id = toast.loading("Preparing file upload");
+            return { toastId: id };
+        },
+        onSuccess: (data, _variables, context) => {
             // Handle the upload URL and upload the file to S3
             handleFileUpload(data.url, data.fileId);
         },
-        onError: (error) => {
-            console.error('Failed to prepare file upload:', error);
+        onError: (error, _variables, context) => {
             setIsUploading(false);
-            alert('Failed to prepare file upload. Please try again.');
+            toast.error('Failed to upload file. Please try again.', {
+                id: context?.toastId
+            });
         }
     });
 
     const confirmUploadMutation = api.file.confirmUpload.useMutation({
-        onSuccess: () => {
+        onMutate: () => {
+            const id = toast.loading("Confirming upload");
+            return { toastId: id };
+        },
+        onSuccess: (_data, _variables, context) => {
             setIsUploading(false);
             // setUploadProgress(0);
             setSelectedFile(null);
             setShowFileModal(false);
             refetchFiles(); // Refresh the file list
             resetExpiryFields(); // Reset expiry fields on successful upload
+            toast.success("File uploaded successfully", {
+                id: context.toastId
+            });
         },
-        onError: (error) => {
-            console.error('Failed to confirm upload:', error);
+        onError: (error, _variables, context) => {
             setIsUploading(false);
-            alert('Failed to confirm upload. Please try again.');
+            toast.error('Failed to confirm upload. Please try again.', {
+                id: context?.toastId
+            });
         }
     });
 
     const getFileUrlMutation = api.file.getFileUrl.useMutation();
+
+    const updateExpiryMutation = api.file.updateExpiryDate.useMutation({
+        onMutate: () => {
+            const id = toast.loading("Updating expiry date");
+            return { toastId: id };
+        },
+        onSuccess: (_data, _variables, context) => {
+            setShowExpiryUpdateModal(false);
+            setUpdatingFileId(null);
+            setNewExpiryDate('');
+            refetchFiles(); // Refresh the file list
+            refetchExpiryFiles();
+            refetchSoonExpiryFiles();
+            toast.success('Expiry date updated successfully!', {
+                id: context.toastId
+            });
+        },
+        onError: (error, _variables, context) => {
+            toast.error('Failed to update expiry date. Please try again.', {
+                id: context?.toastId
+            });
+        }
+    });
+
 
     // Helper functions
     const handleNewDropdownToggle = () => {
@@ -161,7 +221,7 @@ export default function Home() {
             // Validate expiry date if checkbox is checked
             if (hasExpiryDate) {
                 if (!expiryDate) {
-                    alert('Please select an expiry date.');
+                    toast.error('Please select an expiry date.');
                     return;
                 }
 
@@ -170,7 +230,7 @@ export default function Home() {
                 currentDate.setHours(0, 0, 0, 0); // Reset time to start of day for comparison
 
                 if (selectedExpiryDate < currentDate) {
-                    alert('Expiry date cannot be in the past. Please select a future date.');
+                    toast.error('Expiry date cannot be in the past. Please select a future date.');
                     return;
                 }
             }
@@ -213,7 +273,6 @@ export default function Home() {
                 throw new Error('Upload failed');
             }
         } catch (error) {
-            console.error('File upload failed:', error);
             // Confirm failed upload
             confirmUploadMutation.mutate({
                 isUploaded: false,
@@ -241,13 +300,49 @@ export default function Home() {
         })
     }
 
+    const handleUpdateExpiry = (fileId: string) => {
+        setUpdatingFileId(fileId);
+        setShowExpiryUpdateModal(true);
+        setOpenFileMenuId(null); // Close the file menu
+    };
+
+    const handleExpiryUpdateSubmit = (e: React.FormEvent) => {
+        e.preventDefault();
+
+        if (!newExpiryDate) {
+            toast.error('Please select an expiry date.');
+            return;
+        }
+
+        const selectedExpiryDate = new Date(newExpiryDate);
+        const currentDate = new Date();
+        currentDate.setHours(0, 0, 0, 0); // Reset time to start of day for comparison
+
+        if (selectedExpiryDate < currentDate) {
+            toast.error('Expiry date cannot be in the past. Please select a future date.');
+            return;
+        }
+
+        if (updatingFileId) {
+            updateExpiryMutation.mutate({
+                fileId: updatingFileId,
+                newExpiryDate: selectedExpiryDate
+            });
+        }
+    };
+
+    const handleCloseExpiryModal = () => {
+        setShowExpiryUpdateModal(false);
+        setUpdatingFileId(null);
+        setNewExpiryDate('');
+    };
+
     const handlePreviewFile = async (fileId: string) => {
         try {
             const { url } = await getFileUrlMutation.mutateAsync({ fileId, download: false });
             window.open(url, '_blank');
         } catch (err) {
-            console.error('Failed to get preview URL:', err);
-            alert('Failed to get preview URL.');
+            toast.error('Failed to get preview URL.');
         } finally {
             setOpenFileMenuId(null);
         }
@@ -264,8 +359,7 @@ export default function Home() {
             link.click();
             document.body.removeChild(link);
         } catch (err) {
-            console.error('Failed to get download URL:', err);
-            alert('Failed to get download URL.');
+            toast.error('Failed to get download URL.');
         } finally {
             setOpenFileMenuId(null);
         }
@@ -352,7 +446,7 @@ export default function Home() {
                         <div className="mb-4">
                             <div className="block w-full">
                                 <div className="w-full border border-red-200 bg-red-50 text-red-800 px-4 py-3 rounded-lg flex items-center justify-between cursor-pointer">
-                                    <div onClick={() => {router.push("/expiry")}}>
+                                    <div onClick={() => { router.push("/expiry") }}>
                                         <span className="font-semibold">Warning:</span> You have {(expiringSoonFiles?.length || 0)} file(s) expiring within a month and {(expiredFiles?.length || 0)} file(s) already expired. Click to review.
                                     </div>
                                     <button className="cursor-pointer" onClick={() => {
@@ -454,6 +548,7 @@ export default function Home() {
                             onPreview={(fileId) => handlePreviewFile(fileId)}
                             onDownload={(fileId) => handleDownloadFile(fileId)}
                             onDelete={(fileId) => handleDelete(fileId)}
+                            onUpdateExpiry={(fileId) => handleUpdateExpiry(fileId)}
                         />
                     )}
                 </div>
@@ -530,6 +625,50 @@ export default function Home() {
                                     ) : (
                                         'Create Folder'
                                     )}
+                                </button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            )}
+            {showExpiryUpdateModal && (
+                <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+                    <div className="bg-white rounded-lg p-6 w-full max-w-md mx-4">
+                        <h3 className="text-lg font-semibold text-gray-900 mb-4">
+                            Update Expiry Date
+                        </h3>
+                        <form onSubmit={handleExpiryUpdateSubmit}>
+                            <div className="mb-4">
+                                <label htmlFor="newExpiryDate" className="block text-sm font-medium text-gray-700 mb-2">
+                                    New Expiry Date
+                                </label>
+                                <input
+                                    type="date"
+                                    id="newExpiryDate"
+                                    value={newExpiryDate}
+                                    onChange={(e) => setNewExpiryDate(e.target.value)}
+                                    min={new Date().toISOString().split('T')[0]}
+                                    className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+                                    required
+                                />
+                                <p className="text-xs text-gray-500 mt-1">
+                                    Select a future date for document expiry
+                                </p>
+                            </div>
+                            <div className="flex justify-end space-x-3">
+                                <button
+                                    type="button"
+                                    onClick={handleCloseExpiryModal}
+                                    className="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 border border-gray-300 rounded-md hover:bg-gray-200 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-500"
+                                >
+                                    Cancel
+                                </button>
+                                <button
+                                    type="submit"
+                                    disabled={updateExpiryMutation.isPending}
+                                    className="px-4 py-2 text-sm font-medium text-white bg-blue-600 border border-transparent rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed"
+                                >
+                                    {updateExpiryMutation.isPending ? 'Updating...' : 'Update Expiry'}
                                 </button>
                             </div>
                         </form>
