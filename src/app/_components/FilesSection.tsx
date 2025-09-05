@@ -22,6 +22,7 @@ interface FilesSectionProps {
 	onDownload?: (fileId: string) => void;
 	onDelete?: (fileId: string) => void;
 	onRestore?: (fileId: string) => void;
+	onUpdateExpiry?: (fileId: string) => void;
 	isTrash?: boolean;
 	showExpiry?: boolean;
 }
@@ -35,6 +36,7 @@ export default function FilesSection({
 	onDownload,
 	onDelete,
 	onRestore,
+	onUpdateExpiry,
 	isTrash = false,
 	showExpiry = false
 }: FilesSectionProps) {
@@ -110,6 +112,17 @@ export default function FilesSection({
 												Move to trash
 											</button>
 										)}
+										{!isTrash && onUpdateExpiry && (
+											<button
+												onClick={(e) => {
+													e.stopPropagation();
+													onUpdateExpiry(file.id);
+												}}
+												className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
+											>
+												Add/Update expiry date
+											</button>
+										)}
 										{isTrash && onRestore && (
 											<button
 												onClick={(e) => {
@@ -157,7 +170,10 @@ export default function FilesSection({
 							</div>
 
 							{openFileMenuId === file.id && (
-								<div className="absolute right-4 top-2 z-50 w-40 bg-white rounded-md shadow-lg border border-gray-200">
+								<div className="absolute right-4 z-50 w-40 bg-white rounded-md shadow-lg border border-gray-200" style={{
+									top: file.id === files[0]?.id ? '100%' : undefined,
+									bottom: (file.id === files[files.length - 1]?.id || file.id === files[files.length - 2]?.id || file.id === files[files.length - 3]?.id) ? '0' : undefined
+								}}>
 									<div className="py-1">
 										{!isTrash && onPreview && (
 											<button
@@ -190,6 +206,17 @@ export default function FilesSection({
 												className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
 											>
 												Move to trash
+											</button>
+										)}
+										{!isTrash && onUpdateExpiry && (
+											<button
+												onClick={(e) => {
+													e.stopPropagation();
+													onUpdateExpiry(file.id);
+												}}
+												className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
+											>
+												Add/Update expiry date
 											</button>
 										)}
 										{isTrash && onRestore && (
