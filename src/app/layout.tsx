@@ -5,6 +5,7 @@ import { Geist } from "next/font/google";
 import { TRPCReactProvider } from "~/trpc/react";
 import { Toaster } from "react-hot-toast";
 import Providers from "./providers";
+import PresenceProvider from "./PresenceProviders";
 
 export const metadata: Metadata = {
   title: "logdrive",
@@ -24,8 +25,10 @@ export default function RootLayout({
       <body>
         <Providers>
           <TRPCReactProvider>
-            <Toaster />            
+            <Toaster />
+            <PresenceProvider>
               {children}
+            </PresenceProvider>
           </TRPCReactProvider>
         </Providers>
       </body>
