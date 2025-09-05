@@ -5,27 +5,28 @@ import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { api } from "~/trpc/react";
 import Header from "~/app/_components/Header";
+import OnlineUsers from "~/app/_components/OnlineUsers";
 
-interface ActivityLog {
-  id: string;
-  userId: string;
-  fileId: string;
-  action: string;
-  timestamp: string;
-  userAgent?: string;
-  user: {
-    id: string;
-    name: string;
-    email: string;
-    role: string;
-  };
-  file: {
-    id: string;
-    name: string;
-    type: string;
-    s3Key: string;
-  };
-}
+// interface ActivityLog {
+//   id: string;
+//   userId: string;
+//   fileId: string;
+//   action: string;
+//   timestamp: string;
+//   userAgent?: string;
+//   user: {
+//     id: string;
+//     name: string;
+//     email: string;
+//     role: string;
+//   };
+//   file: {
+//     id: string;
+//     name: string;
+//     type: string;
+//     s3Key: string;
+//   };
+// }
 
 interface Employee {
   id: string;
@@ -154,6 +155,11 @@ export default function AdminActivityPage() {
           <p className="mt-2 text-gray-600">
             Monitor all employee activities across the system
           </p>
+        </div>
+
+        {/* Online Users */}
+        <div className="mb-6">
+          <OnlineUsers />
         </div>
 
         {/* All Activities Accordion */}
