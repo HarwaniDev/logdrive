@@ -19,7 +19,7 @@ const userPresence = new Map<string, {
 }>();
 
 // Cleanup interval to mark users offline after inactivity
-const OFFLINE_THRESHOLD = 30000; // 30 seconds
+const OFFLINE_THRESHOLD = 60000;
 setInterval(() => {
     const now = new Date();
     for (const [userId, presence] of userPresence.entries()) {
@@ -28,28 +28,26 @@ setInterval(() => {
             if (presence.status === "online") {
                 presence.status = "offline";
                 presenceEmitter.emit("presence", {
-                    userId: presence.userId,
-                    userName: presence.userName,
-                    status: "offline",
-                    lastSeen: presence.lastSeen,
+                    userPresence
                 });
             }
         }
     }
 }, 10000); // Check every 10 seconds
 
-export type PresenceEvent = {
-    userId: string;
-    userName: string;
-    status: "online" | "offline";
-    lastSeen: Date;
-};
+// export type userPresence = {
+//     userId: string;
+//     userName: string;
+//     status: "online" | "offline";
+//     lastSeen: Date;
+//     connectionCount: number;
+// };
 
 export const presenceRouter = createTRPCRouter({
     // Get all online users
     getOnlineUsers: protectedProcedure.query(({ ctx }) => {
         if (ctx.session.user.role !== "admin") {
-            throw new TRPCError({ code: "UNAUTHORIZED", message: "only admin can subscribe" });
+            throw new TRPCError({ code: "UNAUTHORIZED", message: "only admin can access this endpoint" });
         }
         const onlineUsers = Array.from(userPresence.values())
             .filter(presence => presence.status === "online")
@@ -60,6 +58,38 @@ export const presenceRouter = createTRPCRouter({
             }));
 
         return onlineUsers;
+    }),
+
+    // Get presence info for all users (online users from memory, offline users from DB)
+    getUsersPresence: protectedProcedure.query(async ({ ctx }) => {
+        if (ctx.session.user.role !== "admin") {
+            throw new TRPCError({ code: "UNAUTHORIZED", message: "only admin can access this endpoint" });
+        }
+
+        const users = await ctx.db.user.findMany({
+            select: { id: true, name: true, lastSeen: true },
+            orderBy: { name: "asc" },
+        });
+
+        const presenceList = users.map((u) => {
+            const presence = userPresence.get(u.id);
+            if (presence && presence.status === "online") {
+                return {
+                    userId: presence.userId,
+                    userName: presence.userName,
+                    status: "online" as const,
+                    lastSeen: presence.lastSeen,
+                };
+            }
+            return {
+                userId: u.id,
+                userName: u.name ?? "Unknown User",
+                status: "offline" as const,
+                lastSeen: u.lastSeen ?? new Date(0),
+            };
+        });
+
+        return presenceList;
     }),
 
     // Set user online
@@ -75,11 +105,16 @@ export const presenceRouter = createTRPCRouter({
             if (existing.status === "offline") {
                 existing.status = "online";
                 presenceEmitter.emit("presence", {
-                    userId,
-                    userName,
-                    status: "online",
-                    lastSeen: existing.lastSeen,
+                    userPresence
                 });
+                await ctx.db.user.update({
+                    where: {
+                        id: userId
+                    },
+                    data: {
+                        lastSeen: existing.lastSeen
+                    }
+                })
             }
         } else {
             userPresence.set(userId, {
@@ -89,12 +124,17 @@ export const presenceRouter = createTRPCRouter({
                 lastSeen: new Date(),
                 connectionCount: 1,
             });
+            await ctx.db.user.update({
+                where: {
+                    id: userId
+                },
+                data: {
+                    lastSeen: new Date()
+                }
+            })
 
             presenceEmitter.emit("presence", {
-                userId,
-                userName,
-                status: "online",
-                lastSeen: new Date(),
+                userPresence
             });
         }
 
@@ -109,15 +149,27 @@ export const presenceRouter = createTRPCRouter({
         if (presence) {
             presence.connectionCount = Math.max(0, presence.connectionCount - 1);
             presence.lastSeen = new Date();
-
+            await ctx.db.user.update({
+                where: {
+                    id: userId
+                },
+                data: {
+                    lastSeen: new Date()
+                }
+            })
             if (presence.connectionCount === 0) {
                 presence.status = "offline";
                 presenceEmitter.emit("presence", {
-                    userId: presence.userId,
-                    userName: presence.userName,
-                    status: "offline",
-                    lastSeen: presence.lastSeen,
+                    userPresence
                 });
+                await ctx.db.user.update({
+                    where: {
+                        id: userId
+                    },
+                    data: {
+                        lastSeen: presence.lastSeen
+                    }
+                })
             }
         }
 
@@ -134,10 +186,7 @@ export const presenceRouter = createTRPCRouter({
             if (presence.status === "offline" && presence.connectionCount > 0) {
                 presence.status = "online";
                 presenceEmitter.emit("presence", {
-                    userId: presence.userId,
-                    userName: presence.userName,
-                    status: "online",
-                    lastSeen: presence.lastSeen,
+                    userPresence
                 });
             }
         }
@@ -150,8 +199,8 @@ export const presenceRouter = createTRPCRouter({
         if (ctx.session.user.role !== "admin") {
             throw new TRPCError({ code: "UNAUTHORIZED", message: "only admin can subscribe" });
         }
-        return observable<PresenceEvent>((emit) => {
-            const onPresence = (data: PresenceEvent) => {
+        return observable<typeof userPresence>((emit) => {
+            const onPresence = (data: typeof userPresence) => {
                 emit.next(data);
             };
 

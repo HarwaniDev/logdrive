@@ -53,7 +53,8 @@ export const fileRouter = createTRPCRouter({
                 data: {
                     userId: ctx.session.user.id,
                     fileId: file.id,
-                    action: "CREATE_FOLDER"
+                    action: "CREATE_FOLDER",
+                    userAgent: ctx.headers.get("User-Agent")
                 }
             });
             return {
@@ -187,7 +188,8 @@ export const fileRouter = createTRPCRouter({
                 data: {
                     userId: ctx.session.user.id,
                     fileId: file.id,
-                    action: "UPLOAD"
+                    action: "UPLOAD",
+                    userAgent: ctx.headers.get("User-Agent")
                 }
             });
             return {
@@ -270,7 +272,8 @@ export const fileRouter = createTRPCRouter({
                     data: {
                         userId: ctx.session.user.id,
                         fileId: file.id,
-                        action: input.download ? "DOWNLOAD" : "PREVIEW"
+                        action: input.download ? "DOWNLOAD" : "PREVIEW",
+                        userAgent: ctx.headers.get("User-Agent")
                     }
                 })
             ]);
@@ -305,7 +308,8 @@ export const fileRouter = createTRPCRouter({
                     data: {
                         userId: ctx.session.user.id,
                         fileId: input.fileId,
-                        action: "DELETE"
+                        action: "DELETE",
+                        userAgent: ctx.headers.get("User-Agent")
                     }
                 })
             ]);
@@ -360,7 +364,8 @@ export const fileRouter = createTRPCRouter({
                 data: {
                     userId: ctx.session.user.id,
                     fileId: input.fileId,
-                    action: "RESTORE"
+                    action: "RESTORE",
+                    userAgent: ctx.headers.get("User-Agent")
                 }
             })])
 
