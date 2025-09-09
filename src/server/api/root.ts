@@ -4,6 +4,7 @@ import { userRouter } from "~/server/api/routers/users";
 import { fileRouter } from "~/server/api/routers/file";
 import { activityRouter } from "~/server/api/routers/activity";
 import { presenceRouter } from "~/server/api/routers/presence";
+import { cronRouter } from "./routers/cron";
 
 /**
  * This is the primary router for your server.
@@ -14,7 +15,8 @@ export const appRouter = createTRPCRouter({
   user: userRouter,
   file: fileRouter,
   activity: activityRouter,
-  presence: presenceRouter
+  presence: presenceRouter,
+  cron: cronRouter
 });
 
 // export type definition of API
