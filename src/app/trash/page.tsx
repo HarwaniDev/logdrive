@@ -7,6 +7,7 @@ import { api } from "~/trpc/react";
 import Header from "~/app/_components/Header";
 import FilesSection from "~/app/_components/FilesSection";
 import ErrorPage from "~/app/_components/ErrorPage";
+import toast, { Toaster } from "react-hot-toast";
 
 interface TrashFileItem {
 	id: string;
@@ -31,12 +32,21 @@ export default function TrashPage() {
 	const { data: trashFiles, refetch: refetchTrashFiles, isLoading: isLoadingTrashFiles, error: trashError, isError } = api.file.getTrashContent.useQuery();
 
 	const restoreFileMutation = api.file.restoreFile.useMutation({
-		onSuccess: () => {
-			refetchTrashFiles(); // Refresh the trash list
+		onMutate: () => {
+			const id = toast.loading("Restoring file");
+			return { toastId: id };
 		},
-		onError: (error) => {
+		onSuccess: (_data, _variables, context) => {
+			refetchTrashFiles(); // Refresh the trash list
+			toast.success("File restored successfully", {
+				id: context.toastId
+			})
+		},
+		onError: (error, _variables, context) => {
 			console.error("Failed to restore the file:", error);
-			alert("Failed to restore the file");
+			toast.error("Failed to restore the file", {
+				id: context?.toastId
+			});
 		}
 	});
 
@@ -112,14 +122,14 @@ export default function TrashPage() {
 	return (
 		<div className="min-h-screen bg-gray-50">
 			<Header
-				onToggleNew={() => {}} // No new functionality in trash
-				onCreateFolder={() => {}} // No folder creation in trash
-				onUploadFile={() => {}} // No file upload in trash
+				onToggleNew={() => { }} // No new functionality in trash
+				onCreateFolder={() => { }} // No folder creation in trash
+				onUploadFile={() => { }} // No file upload in trash
 				showNewDropdown={false}
 				userName={session?.user?.name}
 				onSignOut={handleSignOut}
 			/>
-			
+
 			<main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
 				{/* Page Header */}
 				<div className="mb-8">
@@ -141,21 +151,19 @@ export default function TrashPage() {
 							<div className="flex bg-white rounded-lg border border-gray-200 p-1">
 								<button
 									onClick={() => setViewMode('grid')}
-									className={`px-3 py-2 text-sm font-medium rounded-md transition-colors ${
-										viewMode === 'grid'
-											? 'bg-blue-100 text-blue-700'
-											: 'text-gray-500 hover:text-gray-700'
-									}`}
+									className={`px-3 py-2 text-sm font-medium rounded-md transition-colors ${viewMode === 'grid'
+										? 'bg-blue-100 text-blue-700'
+										: 'text-gray-500 hover:text-gray-700'
+										}`}
 								>
 									Grid
 								</button>
 								<button
 									onClick={() => setViewMode('list')}
-									className={`px-3 py-2 text-sm font-medium rounded-md transition-colors ${
-										viewMode === 'list'
-											? 'bg-blue-100 text-blue-700'
-											: 'text-gray-500 hover:text-gray-700'
-									}`}
+									className={`px-3 py-2 text-sm font-medium rounded-md transition-colors ${viewMode === 'list'
+										? 'bg-blue-100 text-blue-700'
+										: 'text-gray-500 hover:text-gray-700'
+										}`}
 								>
 									List
 								</button>

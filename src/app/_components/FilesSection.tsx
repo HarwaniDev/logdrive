@@ -85,7 +85,7 @@ export default function FilesSection({
 													e.stopPropagation();
 													onPreview(file.id);
 												}}
-												className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
+												className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 cursor-pointer"
 											>
 												Preview
 											</button>
@@ -96,7 +96,7 @@ export default function FilesSection({
 													e.stopPropagation();
 													onDownload(file.id);
 												}}
-												className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
+												className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 cursor-pointer"
 											>
 												Download
 											</button>
@@ -107,7 +107,7 @@ export default function FilesSection({
 													e.stopPropagation();
 													onDelete(file.id);
 												}}
-												className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
+												className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 cursor-pointer"
 											>
 												Move to trash
 											</button>
@@ -118,7 +118,7 @@ export default function FilesSection({
 													e.stopPropagation();
 													onUpdateExpiry(file.id);
 												}}
-												className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
+												className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 cursor-pointer"
 											>
 												Add/Update expiry date
 											</button>
@@ -129,7 +129,7 @@ export default function FilesSection({
 													e.stopPropagation();
 													onRestore(file.id);
 												}}
-												className="w-full text-left px-4 py-2 text-sm text-green-700 hover:bg-green-50"
+												className="w-full text-left px-4 py-2 text-sm text-green-700 hover:bg-green-50 cursor-pointer"
 											>
 												Restore file
 											</button>
@@ -181,7 +181,7 @@ export default function FilesSection({
 													e.stopPropagation();
 													onPreview(file.id);
 												}}
-												className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
+												className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 cursor-pointer"
 											>
 												Preview
 											</button>
@@ -192,7 +192,7 @@ export default function FilesSection({
 													e.stopPropagation();
 													onDownload(file.id);
 												}}
-												className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
+												className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 cursor-pointer"
 											>
 												Download
 											</button>
@@ -203,7 +203,7 @@ export default function FilesSection({
 													e.stopPropagation();
 													onDelete(file.id);
 												}}
-												className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
+												className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 cursor-pointer"
 											>
 												Move to trash
 											</button>
@@ -214,7 +214,7 @@ export default function FilesSection({
 													e.stopPropagation();
 													onUpdateExpiry(file.id);
 												}}
-												className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
+												className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 cursor-pointer"
 											>
 												Add/Update expiry date
 											</button>
@@ -225,7 +225,7 @@ export default function FilesSection({
 													e.stopPropagation();
 													onRestore(file.id);
 												}}
-												className="w-full text-left px-4 py-2 text-sm text-green-700 hover:bg-green-50"
+												className="w-full text-left px-4 py-2 text-sm text-green-700 hover:bg-green-50 cursor-pointer"
 											>
 												Restore file
 											</button>

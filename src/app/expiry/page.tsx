@@ -7,6 +7,7 @@ import Header from "~/app/_components/Header";
 import FilesSection from "~/app/_components/FilesSection";
 import ErrorPage from "~/app/_components/ErrorPage";
 import { api } from "~/trpc/react";
+import toast from "react-hot-toast";
 
 interface ExpiryFileItem {
     id: string;
@@ -26,9 +27,12 @@ export default function ExpiryPage() {
     const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
     const [searchQuery, setSearchQuery] = useState('');
     const [openFileMenuId, setOpenFileMenuId] = useState<string | null>(null);
+    const [showExpiryUpdateModal, setShowExpiryUpdateModal] = useState(false);
+    const [updatingFileId, setUpdatingFileId] = useState<string | null>(null);
+    const [newExpiryDate, setNewExpiryDate] = useState('');
 
     const { data, refetch: refetchFiles, isLoading, isError, error } = api.file.getExpiredContent.useQuery();
-    const { data: expiringSoonData, isLoading: isLoadingExpiringSoon, isError: isErrorExpiringSoon, error: errorExpiringSoon } = api.file.getFilesExpiringWithinAMonth.useQuery();
+    const { data: expiringSoonData, refetch: refetchExpiringSoonFiles, isLoading: isLoadingExpiringSoon, isError: isErrorExpiringSoon, error: errorExpiringSoon } = api.file.getFilesExpiringWithinAMonth.useQuery();
     const getFileUrlMutation = api.file.getFileUrl.useMutation();
     const deleteFileMutation = api.file.deleteFile.useMutation({
         onSuccess: () => {
@@ -38,7 +42,29 @@ export default function ExpiryPage() {
             console.error("Failed to delete the file:", error);
             alert("Failed to delete the file");
         }
-    })
+    });
+
+    const updateExpiryMutation = api.file.updateExpiryDate.useMutation({
+        onMutate: () => {
+            const id = toast.loading("Updating expiry date");
+            return { toastId: id };
+        },
+        onSuccess: (_data, _variables, context) => {
+            setShowExpiryUpdateModal(false);
+            setUpdatingFileId(null);
+            setNewExpiryDate('');
+            refetchFiles(); // Refresh expired files list
+            refetchExpiringSoonFiles(); // Refresh expiring soon files list
+            toast.success('Expiry date updated successfully!', {
+                id: context.toastId
+            });
+        },
+        onError: (error, _variables, context) => {
+            toast.error('Failed to update expiry date. Please try again.', {
+                id: context?.toastId
+            });
+        }
+    });
 
     useEffect(() => {
         if (isError) {
@@ -151,6 +177,45 @@ export default function ExpiryPage() {
         setOpenFileMenuId(openFileMenuId === fileId ? null : fileId);
     };
 
+    const handleUpdateExpiry = (fileId: string) => {
+        setUpdatingFileId(fileId);
+        setShowExpiryUpdateModal(true);
+        setOpenFileMenuId(null); // Close the file menu
+    };
+
+    const handleExpiryUpdateSubmit = (e: React.FormEvent) => {
+        e.preventDefault();
+
+        if (!newExpiryDate) {
+            toast.error('Please select an expiry date.');
+            return;
+        }
+
+        const selectedExpiryDate = new Date(newExpiryDate);
+        const currentDate = new Date();
+        currentDate.setHours(0, 0, 0, 0); // Reset time to start of day for comparison
+
+        if (selectedExpiryDate < currentDate) {
+            toast.error('Expiry date cannot be in the past. Please select a future date.');
+            return;
+        }
+
+        if (updatingFileId) {
+            updateExpiryMutation.mutate({
+                fileId: updatingFileId,
+                newExpiryDate: selectedExpiryDate
+            });
+        }
+    };
+
+    const handleCloseExpiryModal = () => {
+        setShowExpiryUpdateModal(false);
+        setUpdatingFileId(null);
+        setNewExpiryDate('');
+    };
+
+
+
     return (
         <div className="min-h-screen bg-gray-50">
             <Header
@@ -244,6 +309,7 @@ export default function ExpiryPage() {
                             onPreview={(fileId) => handlePreviewFile(fileId)}
                             onDownload={(fileId) => handleDownloadFile(fileId)}
                             onDelete={(fileId) => handleDelete(fileId)}
+                            onUpdateExpiry={(fileId) => handleUpdateExpiry(fileId)}
                         />
 
                         <div className="h-8" />
@@ -258,10 +324,57 @@ export default function ExpiryPage() {
                             onPreview={(fileId) => handlePreviewFile(fileId)}
                             onDownload={(fileId) => handleDownloadFile(fileId)}
                             onDelete={(fileId) => handleDelete(fileId)}
+                            onUpdateExpiry={(fileId) => handleUpdateExpiry(fileId)}
                         />
                     </div>
                 )}
             </main>
+
+            {/* Expiry Update Modal */}
+            {showExpiryUpdateModal && (
+                <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+                    <div className="bg-white rounded-lg p-6 w-full max-w-md mx-4">
+                        <h3 className="text-lg font-semibold text-gray-900 mb-4">
+                            Update Expiry Date
+                        </h3>
+                        <form onSubmit={handleExpiryUpdateSubmit}>
+                            <div className="mb-4">
+                                <label htmlFor="newExpiryDate" className="block text-sm font-medium text-gray-700 mb-2">
+                                    New Expiry Date
+                                </label>
+                                <input
+                                    type="date"
+                                    id="newExpiryDate"
+                                    value={newExpiryDate}
+                                    onChange={(e) => setNewExpiryDate(e.target.value)}
+                                    min={new Date().toISOString().split('T')[0]}
+                                    className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+                                    required
+                                />
+                                <p className="text-xs text-gray-500 mt-1">
+                                    Select a future date for document expiry
+                                </p>
+                            </div>
+                            <div className="flex justify-end space-x-3">
+                                <button
+                                    type="button"
+                                    onClick={handleCloseExpiryModal}
+                                    className="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 border border-gray-300 rounded-md hover:bg-gray-200 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-500"
+                                >
+                                    Cancel
+                                </button>
+                                <button
+                                    type="submit"
+                                    disabled={updateExpiryMutation.isPending}
+                                    className="px-4 py-2 text-sm font-medium text-white bg-blue-600 border border-transparent rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed"
+                                >
+                                    {updateExpiryMutation.isPending ? 'Updating...' : 'Update Expiry'}
+                                </button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            )}
         </div>
     );
 }

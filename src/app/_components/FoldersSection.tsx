@@ -51,7 +51,11 @@ export default function FoldersSection({ viewMode, folders }: FoldersSectionProp
 						</div>
 					</div>
 					{folders.map((folder) => (
-						<div key={folder.id} className="px-6 py-4 border-b border-gray-100 hover:bg-gray-50 cursor-pointer transition-colors">
+						<div key={folder.id}
+							onClick={() => {
+								router.push(`?folderId=${folder.id}`);
+							}}
+							className="px-6 py-4 border-b border-gray-100 hover:bg-gray-50 cursor-pointer transition-colors">
 							<div className="grid grid-cols-12 gap-4 items-center">
 								<div className="col-span-6 flex items-center space-x-3">
 									<span className="text-xl">📁</span>
