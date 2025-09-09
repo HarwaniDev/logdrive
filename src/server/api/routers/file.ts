@@ -408,8 +408,7 @@ export const fileRouter = createTRPCRouter({
                         fileId: input.fileId,
                         action: "UPDATE_EXPIRY",
                         userAgent: ctx.headers.get("User-Agent"),
-                        
-
+                        previousExpiry: file.expiryDate
                     }
                 })
 
