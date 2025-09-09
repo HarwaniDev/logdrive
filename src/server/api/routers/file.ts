@@ -393,14 +393,27 @@ export const fileRouter = createTRPCRouter({
                 throw new TRPCError({ message: "expiry date cannot be set to a date previous than today's date", code: "BAD_REQUEST" });
             }
 
-            const _ = await ctx.db.file.update({
-                where: {
-                    id: input.fileId
-                },
-                data: {
-                    expiryDate: input.newExpiryDate
-                }
-            });
+            await Promise.all([
+                ctx.db.file.update({
+                    where: {
+                        id: input.fileId
+                    },
+                    data: {
+                        expiryDate: input.newExpiryDate
+                    }
+                }),
+                ctx.db.activityLog.create({
+                    data: {
+                        userId: ctx.session.user.id,
+                        fileId: input.fileId,
+                        action: "UPDATE_EXPIRY",
+                        userAgent: ctx.headers.get("User-Agent"),
+                        
+
+                    }
+                })
+
+            ])
 
             return {
                 message: "expiry date updated successfully"
