@@ -44,7 +44,7 @@ export default function AdminActivityPage() {
   // Check if user is admin
   useEffect(() => {
     if (status === "loading") return;
-    
+
     if (!session) {
       router.push("/signin");
       return;
@@ -80,9 +80,9 @@ export default function AdminActivityPage() {
     return (
       <div className="min-h-screen bg-gray-50">
         <Header
-          onToggleNew={() => {}}
-          onCreateFolder={() => {}}
-          onUploadFile={() => {}}
+          onToggleNew={() => { }}
+          onCreateFolder={() => { }}
+          onUploadFile={() => { }}
           showNewDropdown={false}
           userName={session?.user?.name ?? null}
           onSignOut={() => signOut()}
@@ -102,9 +102,9 @@ export default function AdminActivityPage() {
     return (
       <div className="min-h-screen bg-gray-50">
         <Header
-          onToggleNew={() => {}}
-          onCreateFolder={() => {}}
-          onUploadFile={() => {}}
+          onToggleNew={() => { }}
+          onCreateFolder={() => { }}
+          onUploadFile={() => { }}
           showNewDropdown={false}
           userName={session?.user?.name ?? null}
           onSignOut={() => signOut()}
@@ -116,35 +116,12 @@ export default function AdminActivityPage() {
     );
   }
 
-  const formatTimestamp = (timestamp: Date) => {
-    return new Date(timestamp).toLocaleString("en-IN");
-  };
-
-  const getActionColor = (action: string) => {
-    switch (action) {
-      case "UPLOAD":
-        return "bg-green-100 text-green-800";
-      case "DOWNLOAD":
-        return "bg-blue-100 text-blue-800";
-      case "DELETE":
-        return "bg-red-100 text-red-800";
-      case "PREVIEW":
-        return "bg-purple-100 text-purple-800";
-      case "RENAME":
-        return "bg-yellow-100 text-yellow-800";
-      case "CREATE_FOLDER":
-        return "bg-indigo-100 text-indigo-800";
-      default:
-        return "bg-gray-100 text-gray-800";
-    }
-  };
-
   return (
     <div className="min-h-screen bg-gray-50">
       <Header
-        onToggleNew={() => {}}
-        onCreateFolder={() => {}}
-        onUploadFile={() => {}}
+        onToggleNew={() => { }}
+        onCreateFolder={() => { }}
+        onUploadFile={() => { }}
         showNewDropdown={false}
         userName={session?.user?.name ?? null}
         onSignOut={() => signOut()}
@@ -197,6 +174,7 @@ export default function AdminActivityPage() {
 // All Activities Accordion Component
 function AllActivitiesAccordion() {
   const [isExpanded, setIsExpanded] = useState(false);
+  const [itemsToShow, setItemsToShow] = useState(10);
 
   // Fetch all activity logs
   const { data: allActivityLogs, error, isLoading } = api.activity.getAllActivityLogs.useQuery(
@@ -205,6 +183,10 @@ function AllActivitiesAccordion() {
       enabled: isExpanded,
     }
   );
+
+  useEffect(() => {
+    if (isExpanded) setItemsToShow(10);
+  }, [isExpanded]);
 
   const formatTimestamp = (timestamp: Date) => {
     return new Date(timestamp).toLocaleString("en-IN");
@@ -224,6 +206,10 @@ function AllActivitiesAccordion() {
         return "bg-yellow-100 text-yellow-800";
       case "CREATE_FOLDER":
         return "bg-indigo-100 text-indigo-800";
+      case "UPDATE_EXPIRY":
+        return "bg-orange-100 text-orange-800";
+      case "RESTORE":
+        return "bg-green-100 text-green-800";
       default:
         return "bg-gray-100 text-gray-800";
     }
@@ -303,7 +289,7 @@ function AllActivitiesAccordion() {
                       </tr>
                     </thead>
                     <tbody className="bg-white divide-y divide-gray-200">
-                      {allActivityLogs.map((log) => (
+                      {allActivityLogs.slice(0, itemsToShow).map((log) => (
                         <tr key={log.id} className="hover:bg-gray-50">
                           <td className="px-4 py-3 whitespace-nowrap">
                             <div className="flex items-center">
@@ -335,6 +321,19 @@ function AllActivitiesAccordion() {
                             </div>
                             <div className="text-sm text-gray-500">
                               {log.file.type}
+                              {log.action === "UPDATE_EXPIRY" && (
+                                <div className="space-y-1">
+                                  <div>
+                                    <span className="text-gray-500">Previous: </span>
+                                    <span>{log.previousExpiry ? new Date(log.previousExpiry as unknown as string).toLocaleDateString("en-IN") : "N/A"}</span>
+                                    <span className="text-gray-500 ml-4">New: </span>
+                                    <span>{log.file?.expiryDate ? new Date(log.file.expiryDate as unknown as string).toLocaleDateString("en-IN") : "N/A"}</span>
+
+                                  </div>
+                                  {/* <div>
+                                  </div> */}
+                                </div>
+                              )}
                             </div>
                           </td>
                           <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-900">
@@ -347,6 +346,16 @@ function AllActivitiesAccordion() {
                       ))}
                     </tbody>
                   </table>
+                  {allActivityLogs.length > itemsToShow && (
+                    <div className="flex justify-center mt-4">
+                      <button
+                        onClick={() => setItemsToShow((prev) => prev + 10)}
+                        className="px-4 py-2 text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      >
+                        Load more
+                      </button>
+                    </div>
+                  )}
                 </div>
               ) : (
                 <div className="text-center py-8">
@@ -362,22 +371,27 @@ function AllActivitiesAccordion() {
 }
 
 // Employee Accordion Component
-function EmployeeAccordion({ 
-  employee, 
-  isExpanded, 
-  onToggle 
-}: { 
-  employee: Employee; 
-  isExpanded: boolean; 
-  onToggle: () => void; 
+function EmployeeAccordion({
+  employee,
+  isExpanded,
+  onToggle
+}: {
+  employee: Employee;
+  isExpanded: boolean;
+  onToggle: () => void;
 }) {
   // Fetch activity logs for this specific employee
+  const [itemsToShow, setItemsToShow] = useState(10);
   const { data: activityLogs, error, isLoading } = api.activity.getActivityLogsOfUser.useQuery(
     { employeeId: employee.id },
     {
       enabled: isExpanded,
     }
   );
+
+  useEffect(() => {
+    if (isExpanded) setItemsToShow(10);
+  }, [isExpanded]);
 
   const formatTimestamp = (timestamp: Date) => {
     return new Date(timestamp).toLocaleString("en-IN");
@@ -397,6 +411,8 @@ function EmployeeAccordion({
         return "bg-yellow-100 text-yellow-800";
       case "CREATE_FOLDER":
         return "bg-indigo-100 text-indigo-800";
+      case "UPDATE_EXPIRY":
+        return "bg-orange-100 text-orange-800";
       default:
         return "bg-gray-100 text-gray-800";
     }
@@ -432,7 +448,7 @@ function EmployeeAccordion({
           </div>
           <div className="flex items-center">
             <span className="text-sm text-gray-500 mr-2">
-              {isExpanded && activityLogs?.length? `${activityLogs?.length} activities` : "Click to view activities"}
+              {isExpanded && activityLogs?.length ? `${activityLogs?.length} activities` : "Click to view activities"}
             </span>
             {isExpanded ? (
               <span className="text-gray-400 text-lg">▼</span>
@@ -473,10 +489,13 @@ function EmployeeAccordion({
                         <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                           User Agent
                         </th>
+                        <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                          Details
+                        </th>
                       </tr>
                     </thead>
                     <tbody className="bg-white divide-y divide-gray-200">
-                      {activityLogs.map((log) => (
+                      {activityLogs.slice(0, itemsToShow).map((log) => (
                         <tr key={log.id} className="hover:bg-gray-50">
                           <td className="px-4 py-3 whitespace-nowrap">
                             <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${getActionColor(log.action)}`}>
@@ -497,10 +516,36 @@ function EmployeeAccordion({
                           <td className="px-4 py-3 text-sm text-gray-500 max-w-xs truncate">
                             {log.userAgent || "N/A"}
                           </td>
+                          <td className="px-4 py-3 text-sm text-gray-700">
+                            {log.action === "UPDATE_EXPIRY" ? (
+                              <div className="space-y-1">
+                                <div>
+                                  <span className="text-gray-500">Previous: </span>
+                                  <span>{log.previousExpiry ? new Date(log.previousExpiry as unknown as string).toLocaleDateString("en-IN") : "N/A"}</span>
+                                </div>
+                                <div>
+                                  <span className="text-gray-500">New: </span>
+                                  <span>{log.file?.expiryDate ? new Date(log.file.expiryDate as unknown as string).toLocaleDateString("en-IN") : "N/A"}</span>
+                                </div>
+                              </div>
+                            ) : (
+                              <span className="text-gray-400">-</span>
+                            )}
+                          </td>
                         </tr>
                       ))}
                     </tbody>
                   </table>
+                  {activityLogs.length > itemsToShow && (
+                    <div className="flex justify-center mt-4">
+                      <button
+                        onClick={() => setItemsToShow((prev) => prev + 10)}
+                        className="px-4 py-2 text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      >
+                        Load more
+                      </button>
+                    </div>
+                  )}
                 </div>
               ) : (
                 <div className="text-center py-8">
