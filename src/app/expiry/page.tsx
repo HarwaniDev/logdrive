@@ -75,6 +75,21 @@ export default function ExpiryPage() {
         }
     }, [isError, isErrorExpiringSoon]);
 
+    // Close file context menu when user presses Escape
+    useEffect(() => {
+        const handleKeyDown = (event: KeyboardEvent) => {
+            if (event.key === 'Escape' && openFileMenuId) {
+                setOpenFileMenuId(null);
+            }
+        };
+
+        window.addEventListener('keydown', handleKeyDown);
+        return () => {
+            window.removeEventListener('keydown', handleKeyDown);
+        };
+    }, [openFileMenuId]);
+
+
     const getFileIcon = (mimeType: string): string => {
         if (mimeType?.startsWith('image/')) return '🖼️';
         if (mimeType?.startsWith('video/')) return '🎥';
@@ -216,6 +231,7 @@ export default function ExpiryPage() {
 
 
 
+
     return (
         <div className="min-h-screen bg-gray-50">
             <Header
@@ -226,25 +242,42 @@ export default function ExpiryPage() {
                 userName={session?.user?.name}
             />
 
-            <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+            <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8" onClick={() => openFileMenuId && setOpenFileMenuId(null)}>
                 <div className="mb-8">
                     <div className="flex items-center justify-between">
                         <div>
                             <h1 className="text-3xl font-bold text-gray-900">Expiry</h1>
-                            <p className="mt-2 text-gray-600">Files that have an expiry date set</p>
+                            <p className="hidden md:block mt-2 text-gray-600">Files that have an expiry date set</p>
                         </div>
                         <div className="flex items-center space-x-4">
                             <button
+                                onClick={() => {
+                                    refetchExpiringSoonFiles();
+                                    refetchFiles();
+                                }}
+                                title="Refresh files"
+                                disabled={isLoading && isLoadingExpiringSoon}
+                                className="hidden md:block p-2 cursor-pointer text-gray-500 hover:text-gray-700 disabled:opacity-50 disabled:cursor-not-allowed">
+                                🔄
+                            </button>
+                            <button
                                 onClick={() => router.push('/')}
-                                className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors cursor-pointer"
+                                className="hidden md:block px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors cursor-pointer"
                                 title="Back to Root"
                             >
                                 ← Back to Root
                             </button>
+                            <button
+                                onClick={() => router.push('/')}
+                                className="md:hidden sm:block px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors cursor-pointer"
+                                title="Back to Root"
+                            >
+                                Back
+                            </button>
                             <div className="flex bg-white rounded-lg border border-gray-200 p-1">
                                 <button
                                     onClick={() => setViewMode('grid')}
-                                    className={`px-3 py-2 text-sm font-medium rounded-md transition-colors ${viewMode === 'grid'
+                                    className={`cursor-pointer px-3 py-2 text-sm font-medium rounded-md transition-colors ${viewMode === 'grid'
                                         ? 'bg-blue-100 text-blue-700'
                                         : 'text-gray-500 hover:text-gray-700'
                                         }`}
@@ -253,7 +286,7 @@ export default function ExpiryPage() {
                                 </button>
                                 <button
                                     onClick={() => setViewMode('list')}
-                                    className={`px-3 py-2 text-sm font-medium rounded-md transition-colors ${viewMode === 'list'
+                                    className={`cursor-pointer px-3 py-2 text-sm font-medium rounded-md transition-colors ${viewMode === 'list'
                                         ? 'bg-blue-100 text-blue-700'
                                         : 'text-gray-500 hover:text-gray-700'
                                         }`}
