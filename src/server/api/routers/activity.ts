@@ -27,6 +27,7 @@ export const activityRouter = createTRPCRouter({
                             name: true,
                             type: true,
                             s3Key: true,
+                            expiryDate: true,
                         }
                     }
                 },
@@ -76,6 +77,7 @@ export const activityRouter = createTRPCRouter({
                             name: true,
                             type: true,
                             s3Key: true,
+                            expiryDate: true,
                         }
                     }
                 },
