@@ -25,92 +25,115 @@ export const fileRouter = createTRPCRouter({
             })
         )
         .mutation(async ({ ctx, input }) => {
-            const key = `${ctx.session.user.email}/${input.folderName}/`;
+            try {
+                const key = `${ctx.session.user.email}/${input.folderName}/`;
 
-            // Upload empty object as "folder marker"
-            const command = new PutObjectCommand({
-                Bucket: "logdrive",
-                Key: key,
-                Body: "", // just empty string
-            });
+                // Upload empty object as "folder marker"
+                const command = new PutObjectCommand({
+                    Bucket: "logdrive",
+                    Key: key,
+                    Body: "", // just empty string
+                });
 
-            const [_, file] = await Promise.all([
                 // send command to s3
-                s3.send(command),
+                const s3Response = await s3.send(command);
 
-                // create folder in db
-                ctx.db.file.create({
-                    data: {
-                        name: input.folderName,
-                        type: "FOLDER",
-                        parentId: input.parentId, // if null, will be stored in root
-                        ownerId: ctx.session.user.id,
-                    }
-                }),
-            ]);
-
-            await ctx.db.activityLog.create({
-                data: {
-                    userId: ctx.session.user.id,
-                    fileId: file.id,
-                    action: "CREATE_FOLDER",
-                    userAgent: ctx.headers.get("User-Agent")
+                if (!s3Response) {
+                    throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "AWS S3 services are down" });
                 }
-            });
-            return {
-                success: true
+                await ctx.db.$transaction(async (tx) => {
+                    const file = await tx.file.create({
+                        data: {
+                            name: input.folderName,
+                            type: "FOLDER",
+                            parentId: input.parentId, // if null, will be stored in root
+                            ownerId: ctx.session.user.id,
+                            status: "ACTIVE"
+                        }
+                    });
+
+                    await tx.activityLog.create({
+                        data: {
+                            userId: ctx.session.user.id,
+                            fileId: file.id,
+                            action: "CREATE_FOLDER",
+                            userAgent: ctx.headers.get("User-Agent")
+                        }
+                    });
+                });
+
+                return { success: true };
+            } catch (error) {
+                console.error("addFolder failed:", error);
+                if (error instanceof TRPCError) {
+                    throw error;
+                }
+                throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Failed to create folder" });
             }
         }),
     getExpiredContent: protectedProcedure
         .query(async ({ ctx }) => {
-            const now = new Date();
-            const files = await ctx.db.file.findMany({
-                where: {
-                    showFile: true,
-                    type: { not: "FOLDER" },
-                    expiryDate: {
-                        lt: now
-                    }
-                },
-                orderBy: [
-                    { name: "asc" }
-                ],
-                include: {
-                    owner: {
-                        select: {
-                            name: true
+            try {
+                const now = new Date();
+                const files = await ctx.db.file.findMany({
+                    where: {
+                        showFile: true,
+                        type: { not: "FOLDER" },
+                        expiryDate: {
+                            lt: now
+                        },
+                        status: "ACTIVE"
+                    },
+                    orderBy: [
+                        { name: "asc" }
+                    ],
+                    include: {
+                        owner: {
+                            select: {
+                                name: true
+                            }
                         }
                     }
-                }
-            });
-            return files;
+                });
+                return files;
+            } catch (error) {
+                console.error("getExpiredContent failed:", error);
+                throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Failed to fetch expired content" });
+            }
         }),
     getFilesExpiringWithinAMonth: protectedProcedure
         .query(async ({ ctx }) => {
-            const now = new Date();
-            const oneMonthLater = new Date();
-            oneMonthLater.setMonth(oneMonthLater.getMonth() + 1);
-            const files = await ctx.db.file.findMany({
-                where: {
-                    showFile: true,
-                    type: { not: "FOLDER" },
-                    expiryDate: {
-                        gte: now,
-                        lte: oneMonthLater
-                    }
-                },
-                orderBy: [
-                    { name: "asc" }
-                ],
-                include: {
-                    owner: {
-                        select: {
-                            name: true
+            try {
+                const now = new Date();
+                const oneMonthLater = new Date();
+                oneMonthLater.setMonth(oneMonthLater.getMonth() + 1);
+                const files = await ctx.db.file.findMany({
+                    where: {
+                        showFile: true,
+                        type: { not: "FOLDER" },
+                        expiryDate: {
+                            gte: now,
+                            lte: oneMonthLater
+                        },
+                        status: "ACTIVE"
+                    },
+                    orderBy: [
+                        { name: "asc" }
+                    ],
+                    include: {
+                        owner: {
+                            select: {
+                                name: true
+                            }
                         }
                     }
-                }
-            });
-            return files;
+                });
+                return files;
+            } catch (error) {
+                console.error("getFilesExpiringWithinAMonth failed:", error);
+                throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Failed to fetch expired content" });
+            }
+
         }),
     // TODO:- check for scenario when same name files are uploaded to root or in a same folder.
     // TODO:- see how can we add filesize to db.
@@ -123,35 +146,38 @@ export const fileRouter = createTRPCRouter({
             expiryDate: z.date().optional()
         }))
         .mutation(async ({ ctx, input }) => {
-            let key;
-            if (input.folderId !== null) {
-                // Verify the folder exists
-                const folder = await ctx.db.file.findFirst({
-                    where: {
-                        id: input.folderId,
-                        type: "FOLDER",
-                        // ownerId: ctx.session.user.id,
-                        deletedAt: null,
+            try {
+                let key;
+                if (input.folderId !== null) {
+                    // Verify the folder exists
+                    const folder = await ctx.db.file.findFirst({
+                        where: {
+                            id: input.folderId,
+                            type: "FOLDER",
+                            // ownerId: ctx.session.user.id,
+                            deletedAt: null,
+                        }
+                    });
+                    if (!folder) {
+                        throw new TRPCError({ message: "folder not found", code: "BAD_REQUEST" });
+                    } else {
+                        key = `${ctx.session.user.email}/${folder?.name}/${input.fileName}`
                     }
-                });
-                if (!folder) {
-                    throw new Error("folder not found");
                 } else {
-                    key = `${ctx.session.user.email}/${folder?.name}/${input.fileName}`
+                    key = `${ctx.session.user.email}/${input.fileName}`;
                 }
-            } else {
-                key = `${ctx.session.user.email}/${input.fileName}`;
-            }
 
-            const command = new PutObjectCommand({
-                Bucket: "logdrive",
-                Key: key,
-                ContentType: input.fileType,
-            });
+                const command = new PutObjectCommand({
+                    Bucket: "logdrive",
+                    Key: key,
+                    ContentType: input.fileType,
+                });
 
-            const [url, file] = await Promise.all([
-                getSignedUrl(s3, command, { expiresIn: 120 }), // 120 sec,
-                ctx.db.file.create({
+                const url = await getSignedUrl(s3, command, { expiresIn: 120 });
+                if (!url) {
+                    throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "AWS services are down" })
+                }
+                const file = await ctx.db.file.create({
                     data: {
                         name: input.fileName,
                         type: "FILE",
@@ -163,10 +189,16 @@ export const fileRouter = createTRPCRouter({
                         expiryDate: input.expiryDate ?? null
                     }
                 })
-            ]);
-            const fileId = file.id;
+                const fileId = file.id;
 
-            return { url, key, fileId };
+                return { url, key, fileId };
+            } catch (error) {
+                console.error("addFile failed:", error);
+                if (error instanceof TRPCError) {
+                    throw error;
+                }
+                throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Failed to add file" });
+            }
         }),
     // use this in frontend after user uploads the file. If file upload is successful then send isUploaded as true or else false
     confirmUpload: protectedProcedure
@@ -175,25 +207,33 @@ export const fileRouter = createTRPCRouter({
             fileId: z.string()
         }))
         .mutation(async ({ ctx, input }) => {
-            const file = await ctx.db.file.update({
-                where: {
-                    id: input.fileId
-                },
-                data: {
-                    status: input.isUploaded === true ? "ACTIVE" : "FAILED"
-                }
-            });
+            try {
+                const file = await ctx.db.file.update({
+                    where: {
+                        id: input.fileId
+                    },
+                    data: {
+                        status: input.isUploaded === true ? "ACTIVE" : "FAILED"
+                    }
+                });
 
-            await ctx.db.activityLog.create({
-                data: {
-                    userId: ctx.session.user.id,
-                    fileId: file.id,
-                    action: "UPLOAD",
-                    userAgent: ctx.headers.get("User-Agent")
+                await ctx.db.activityLog.create({
+                    data: {
+                        userId: ctx.session.user.id,
+                        fileId: file.id,
+                        action: "UPLOAD",
+                        userAgent: ctx.headers.get("User-Agent")
+                    }
+                });
+                return {
+                    success: true
                 }
-            });
-            return {
-                success: true
+            } catch (error) {
+                console.error("confirmUpload failed:", error);
+                if (error instanceof TRPCError) {
+                    throw error;
+                }
+                throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Failed to confirm upload" });
             }
         }),
     getContent: protectedProcedure
@@ -201,43 +241,51 @@ export const fileRouter = createTRPCRouter({
             folderId: z.string().nullable(), // null = root
         }))
         .query(async ({ ctx, input }) => {
+            try {
+                if (input.folderId) {
+                    const file = await ctx.db.file.findUnique({
+                        where: {
+                            id: input.folderId,
+                            showFile: true
+                        }
+                    })
+                    if (!file) {
+                        throw new TRPCError({ code: "BAD_REQUEST" })
+                    }
+                }
 
-            if (input.folderId) {
-                const file = await ctx.db.file.findUnique({
+                const files = await ctx.db.file.findMany({
                     where: {
-                        id: input.folderId,
-                        showFile: true
-                    }
-                })
-                if (!file) {
-                    throw new TRPCError({ code: "BAD_REQUEST" })
-                }
-            }
-
-            const files = await ctx.db.file.findMany({
-                where: {
-                    parentId: input.folderId,
-                    // ownerId: ctx.session.user.id,
-                    deletedAt: null,
-                },
-                orderBy: [
-                    { type: "desc" },   // folders first
-                    { name: "asc" }     // then alphabetically
-                ],
-                include: {
-                    _count: {
-                        select: {
-                            children: true
-                        }
+                        parentId: input.folderId,
+                        // ownerId: ctx.session.user.id,
+                        deletedAt: null,
+                        status: "ACTIVE"
                     },
-                    owner: {
-                        select: {
-                            name: true
+                    orderBy: [
+                        { type: "desc" },   // folders first
+                        { name: "asc" }     // then alphabetically
+                    ],
+                    include: {
+                        _count: {
+                            select: {
+                                children: true
+                            }
+                        },
+                        owner: {
+                            select: {
+                                name: true
+                            }
                         }
                     }
+                });
+                return files;
+            } catch (error) {
+                console.error("getContent failed:", error);
+                if (error instanceof TRPCError) {
+                    throw error;
                 }
-            });
-            return files;
+                throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Failed to fetch content" });
+            }
         }),
     getFileUrl: protectedProcedure
         .input(z.object({
@@ -245,132 +293,179 @@ export const fileRouter = createTRPCRouter({
             download: z.boolean().optional(), // false = preview, true = download
         }))
         .mutation(async ({ ctx, input }) => {
-            const file = await ctx.db.file.findFirst({
-                where: {
-                    id: input.fileId,
-                    type: "FILE",
-                    showFile: true,
-                },
-            });
+            try {
+                const file = await ctx.db.file.findFirst({
+                    where: {
+                        id: input.fileId,
+                        type: "FILE",
+                        showFile: true,
+                    },
+                });
 
-            if (!file || !file.s3Key) {
-                throw new TRPCError({ message: "file not found", code: "NOT_FOUND" });
+                if (!file || !file.s3Key) {
+                    throw new TRPCError({ message: "file not found", code: "NOT_FOUND" });
+                }
+
+                const command = new GetObjectCommand({
+                    Bucket: "logdrive",
+                    Key: file.s3Key,
+                    ResponseContentType: file.mimeType ?? undefined,
+                    ResponseContentDisposition: input.download
+                        ? `attachment; filename="${file.name}"`
+                        : undefined,
+                });
+
+                const [url, _] = await Promise.all([
+                    getSignedUrl(s3, command, { expiresIn: 600 }),
+                    await ctx.db.activityLog.create({
+                        data: {
+                            userId: ctx.session.user.id,
+                            fileId: file.id,
+                            action: input.download ? "DOWNLOAD" : "PREVIEW",
+                            userAgent: ctx.headers.get("User-Agent")
+                        }
+                    })
+                ]);
+
+                return { url };
+            } catch (error) {
+                console.error("getFileUrl failed:", error);
+                if (error instanceof TRPCError) {
+                    throw error;
+                }
+                throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Failed to get file URL" });
             }
-
-            const command = new GetObjectCommand({
-                Bucket: "logdrive",
-                Key: file.s3Key,
-                ResponseContentType: file.mimeType ?? undefined,
-                ResponseContentDisposition: input.download
-                    ? `attachment; filename="${file.name}"`
-                    : undefined,
-            });
-
-            const [url, _] = await Promise.all([
-                getSignedUrl(s3, command, { expiresIn: 600 }),
-                await ctx.db.activityLog.create({
-                    data: {
-                        userId: ctx.session.user.id,
-                        fileId: file.id,
-                        action: input.download ? "DOWNLOAD" : "PREVIEW",
-                        userAgent: ctx.headers.get("User-Agent")
-                    }
-                })
-            ]);
-
-            return { url };
         }),
     deleteFile: protectedProcedure
         .input(z.object({
             fileId: z.string()
         }))
         .mutation(async ({ ctx, input }) => {
-            const file = await ctx.db.file.findUnique({
-                where: {
-                    id: input.fileId,
-                    type: "FILE"
-                }
-            });
-            if (!file) {
-                throw new TRPCError({ code: "NOT_FOUND", cause: "Cannot find provided fileId or the fileId is associated with a folder" });
-            };
-            await Promise.all([
-                ctx.db.file.update({
+            try {
+                const file = await ctx.db.file.findUnique({
                     where: {
-                        id: input.fileId
-                    },
-                    data: {
-                        showFile: false,
-                        deletedAt: new Date()
+                        id: input.fileId,
+                        type: "FILE"
                     }
-                }),
-                ctx.db.activityLog.create({
-                    data: {
-                        userId: ctx.session.user.id,
-                        fileId: input.fileId,
-                        action: "DELETE",
-                        userAgent: ctx.headers.get("User-Agent")
-                    }
-                })
-            ]);
-            return {
-                message: "file deleted successfully"
+                });
+                if (!file) {
+                    throw new TRPCError({ code: "NOT_FOUND", cause: "Cannot find provided fileId or the fileId is associated with a folder" });
+                };
+                await ctx.db.$transaction(async (tx) => {
+                    await tx.file.update({
+                        where: {
+                            id: input.fileId
+                        },
+                        data: {
+                            showFile: false,
+                            deletedAt: new Date(),
+                            deletedById: ctx.session.user.id
+                        }
+                    });
+                    await tx.activityLog.create({
+                        data: {
+                            userId: ctx.session.user.id,
+                            fileId: input.fileId,
+                            action: "DELETE",
+                            userAgent: ctx.headers.get("User-Agent")
+                        }
+                    });
+                });
+                return {
+                    
+                    message: "file deleted successfully"
+                }
+            } catch (error) {
+                console.error("deleteFile failed:", error);
+                if (error instanceof TRPCError) {
+                    throw error;
+                }
+                throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Failed to delete file" });
             }
         }),
     getTrashContent: protectedProcedure
         .query(async ({ ctx }) => {
-            const files = await ctx.db.file.findMany({
-                where: {
-                    deletedAt: { not: null },
-                    type: { not: "FOLDER" }
-                },
-                orderBy: [
-                    { type: "desc" },
-                    { name: "asc" }     // alphabetically
-                ],
-                include: {
-                    _count: {
-                        select: {
-                            children: true
+            try {
+                const files = await ctx.db.file.findMany({
+                    where: {
+                        deletedAt: { not: null },
+                        type: { not: "FOLDER" },
+                        status: "ACTIVE"
+                    },
+                    orderBy: [
+                        { type: "desc" },
+                        { name: "asc" }     // alphabetically
+                    ],
+                    include: {
+                        _count: {
+                            select: {
+                                children: true
+                            }
+                        },
+                        owner: {
+                            select: {
+                                name: true
+                            }
+                        },
+                        deletedBy: {
+                            select: {
+                                name: true
+                            }
                         }
                     }
+                });
+                return files;
+            } catch (error) {
+                console.error("getTrashContent failed:", error);
+                if (error instanceof TRPCError) {
+                    throw error;
                 }
-            });
-            return files;
+                throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Failed to fetch trash content" });
+            }
         }),
     restoreFile: protectedProcedure
         .input(z.object({
             fileId: z.string()
         }))
         .mutation(async ({ ctx, input }) => {
-            const file = await ctx.db.file.findUnique({
-                where: {
-                    id: input.fileId
+            try {
+                const file = await ctx.db.file.findUnique({
+                    where: {
+                        id: input.fileId
+                    }
+                });
+                if (!file) {
+                    throw new TRPCError({ code: "BAD_REQUEST", message: "fileId not found or is invalid" })
                 }
-            });
-            if (!file) {
-                throw new TRPCError({ code: "BAD_REQUEST", message: "fileId not found or is invalid" })
-            }
-            await Promise.all([ctx.db.file.update({
-                where: {
-                    id: input.fileId
-                },
-                data: {
-                    deletedAt: null,
-                    showFile: true
-                }
-            }),
-            ctx.db.activityLog.create({
-                data: {
-                    userId: ctx.session.user.id,
-                    fileId: input.fileId,
-                    action: "RESTORE",
-                    userAgent: ctx.headers.get("User-Agent")
-                }
-            })])
+                await ctx.db.$transaction(async (tx) => {
+                    await tx.file.update({
+                        where: {
+                            id: input.fileId
+                        },
+                        data: {
+                            deletedAt: null,
+                            showFile: true
+                        }
+                    });
+                    await tx.activityLog.create({
+                        data: {
+                            userId: ctx.session.user.id,
+                            fileId: input.fileId,
+                            action: "RESTORE",
+                            userAgent: ctx.headers.get("User-Agent")
+                        }
+                    });
+                })
 
-            return {
-                message: "file restored successfully"
+                return {
+                    message: "file restored successfully"
+                }
+            } catch (error) {
+                console.error("restoreFile failed:", error);
+                if (error instanceof TRPCError) {
+                    throw error;
+                }
+                throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Failed to restore file" });
             }
         }),
     updateExpiryDate: protectedProcedure
@@ -379,43 +474,49 @@ export const fileRouter = createTRPCRouter({
             newExpiryDate: z.date()
         }))
         .mutation(async ({ ctx, input }) => {
-            const file = await ctx.db.file.findUnique({
-                where: {
-                    id: input.fileId
-                }
-            });
-            if (!file) {
-                throw new TRPCError({ message: "file not found or invalid fileId", code: "NOT_FOUND" });
-            };
-
-            const today = new Date();
-            if (input.newExpiryDate < today) {
-                throw new TRPCError({ message: "expiry date cannot be set to a date previous than today's date", code: "BAD_REQUEST" });
-            }
-
-            await Promise.all([
-                ctx.db.file.update({
+            try {
+                const file = await ctx.db.file.findUnique({
                     where: {
                         id: input.fileId
-                    },
-                    data: {
-                        expiryDate: input.newExpiryDate
                     }
-                }),
-                ctx.db.activityLog.create({
-                    data: {
-                        userId: ctx.session.user.id,
-                        fileId: input.fileId,
-                        action: "UPDATE_EXPIRY",
-                        userAgent: ctx.headers.get("User-Agent"),
-                        previousExpiry: file.expiryDate
-                    }
+                });
+                if (!file) {
+                    throw new TRPCError({ message: "file not found or invalid fileId", code: "NOT_FOUND" });
+                };
+
+                const today = new Date();
+                if (input.newExpiryDate < today) {
+                    throw new TRPCError({ message: "expiry date cannot be set to a date previous than today's date", code: "BAD_REQUEST" });
+                }
+
+                await ctx.db.$transaction(async (tx) => {
+                    await tx.file.update({
+                        where: {
+                            id: input.fileId
+                        },
+                        data: {
+                            expiryDate: input.newExpiryDate
+                        }
+                    });
+                    await tx.activityLog.create({
+                        data: {
+                            userId: ctx.session.user.id,
+                            fileId: input.fileId,
+                            action: "UPDATE_EXPIRY",
+                            userAgent: ctx.headers.get("User-Agent"),
+                            previousExpiry: file.expiryDate
+                        }
+                    })
                 })
-
-            ])
-
-            return {
-                message: "expiry date updated successfully"
+                return {
+                    message: "expiry date updated successfully"
+                }
+            } catch (error) {
+                console.error("updateExpiryDate failed:", error);
+                if (error instanceof TRPCError) {
+                    throw error;
+                }
+                throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Failed to update expiry date" });
             }
         })
 })
