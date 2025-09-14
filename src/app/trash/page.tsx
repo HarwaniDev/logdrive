@@ -7,7 +7,7 @@ import { api } from "~/trpc/react";
 import Header from "~/app/_components/Header";
 import FilesSection from "~/app/_components/FilesSection";
 import ErrorPage from "~/app/_components/ErrorPage";
-import toast, { Toaster } from "react-hot-toast";
+import toast from "react-hot-toast";
 
 interface TrashFileItem {
 	id: string;
@@ -17,6 +17,8 @@ interface TrashFileItem {
 	icon?: string;
 	s3Key: string;
 	owner: string;
+	createdAt: string;
+	deletedBy: string;
 }
 
 export default function TrashPage() {
@@ -57,6 +59,20 @@ export default function TrashPage() {
 		}
 	}, [isError]);
 
+	// Close file context menu when user presses Escape
+	useEffect(() => {
+		const handleKeyDown = (event: KeyboardEvent) => {
+			if (event.key === 'Escape' && openFileMenuId) {
+				setOpenFileMenuId(null);
+			}
+		};
+
+		window.addEventListener('keydown', handleKeyDown);
+		return () => {
+			window.removeEventListener('keydown', handleKeyDown);
+		};
+	}, [openFileMenuId]);
+
 	// Helper function to get file icon based on MIME type
 	const getFileIcon = (mimeType: string): string => {
 		if (mimeType?.startsWith('image/')) return '🖼️';
@@ -78,6 +94,9 @@ export default function TrashPage() {
 		modified: file.updatedAt.toLocaleDateString(),
 		icon: getFileIcon(file.mimeType || ''),
 		s3Key: file.s3Key || '',
+		owner: file.owner.name,
+		createdAt: file.createdAt.toLocaleDateString(),
+		deletedBy: file.deletedBy!.name
 	})) : [];
 
 	const filteredFiles = files.filter(file =>
@@ -130,28 +149,44 @@ export default function TrashPage() {
 				onSignOut={handleSignOut}
 			/>
 
-			<main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+			<main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8" onClick={() => openFileMenuId && setOpenFileMenuId(null)}>
 				{/* Page Header */}
 				<div className="mb-8">
 					<div className="flex items-center justify-between">
 						<div>
 							<h1 className="text-3xl font-bold text-gray-900">Trash</h1>
-							<p className="mt-2 text-gray-600">Items that have been in Trash more than 30 days will be automatically deleted</p>
+							<p className="mt-2 text-gray-600 hidden md:block">Items that have been in Trash more than 30 days will be automatically deleted</p>
 						</div>
 						<div className="flex items-center space-x-4">
+							<button
+								onClick={() => {
+									refetchTrashFiles()
+								}}
+								title="Refresh files"
+								disabled={isLoadingTrashFiles}
+								className="hidden md:block p-2 cursor-pointer text-gray-500 hover:text-gray-700 disabled:opacity-50 disabled:cursor-not-allowed">
+								🔄
+							</button>
 							{/* Back to Root Button */}
 							<button
 								onClick={() => router.push('/')}
-								className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors cursor-pointer"
+								className="hidden md:block px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors cursor-pointer"
 								title="Back to Root"
 							>
 								← Back to Root
+							</button>
+							<button
+								onClick={() => router.push('/')}
+								className="sm:block md:hidden px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors cursor-pointer"
+								title="Back to Root"
+							>
+								Back
 							</button>
 							{/* View Mode Toggle */}
 							<div className="flex bg-white rounded-lg border border-gray-200 p-1">
 								<button
 									onClick={() => setViewMode('grid')}
-									className={`px-3 py-2 text-sm font-medium rounded-md transition-colors ${viewMode === 'grid'
+									className={`cursor-pointer px-3 py-2 text-sm font-medium rounded-md transition-colors ${viewMode === 'grid'
 										? 'bg-blue-100 text-blue-700'
 										: 'text-gray-500 hover:text-gray-700'
 										}`}
@@ -160,7 +195,7 @@ export default function TrashPage() {
 								</button>
 								<button
 									onClick={() => setViewMode('list')}
-									className={`px-3 py-2 text-sm font-medium rounded-md transition-colors ${viewMode === 'list'
+									className={`cursor-pointer px-3 py-2 text-sm font-medium rounded-md transition-colors ${viewMode === 'list'
 										? 'bg-blue-100 text-blue-700'
 										: 'text-gray-500 hover:text-gray-700'
 										}`}
