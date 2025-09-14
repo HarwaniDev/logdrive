@@ -67,8 +67,8 @@ export default function Home() {
     })
 
     // expiry related queries
-    const { data: expiredFiles, refetch: refetchExpiryFiles, isError: expiredContentError } = api.file.getExpiredContent.useQuery();
-    const { data: expiringSoonFiles, refetch: refetchSoonExpiryFiles, isError: expiringError } = api.file.getFilesExpiringWithinAMonth.useQuery();
+    const { data: expiredFiles, refetch: refetchExpiryFiles, isError: expiredContentError, isLoading: isLoadingExpiredContent } = api.file.getExpiredContent.useQuery();
+    const { data: expiringSoonFiles, refetch: refetchSoonExpiryFiles, isError: expiringError, isLoading: isLoadingExpringContent } = api.file.getFilesExpiringWithinAMonth.useQuery();
 
     // Handle query errors
     // TODO: handle errors
@@ -80,7 +80,21 @@ export default function Home() {
         if (expiredContentError || expiringError) {
             toast.error('Failed to fetch expiring files details');
         }
-    }, [isError, expiredContentError, expiringError])
+    }, [isError, expiredContentError, expiringError]);
+
+    // Close file context menu when user presses Escape
+    useEffect(() => {
+        const handleKeyDown = (event: KeyboardEvent) => {
+            if (event.key === 'Escape' && openFileMenuId) {
+                setOpenFileMenuId(null);
+            }
+        };
+
+        window.addEventListener('keydown', handleKeyDown);
+        return () => {
+            window.removeEventListener('keydown', handleKeyDown);
+        };
+    }, [openFileMenuId]);
 
     const createFolderMutation = api.file.addFolder.useMutation({
         onMutate: () => {
@@ -125,7 +139,9 @@ export default function Home() {
 
     const uploadFileMutation = api.file.addFile.useMutation({
         onMutate: () => {
-            const id = toast.loading("Preparing file upload");
+            const id = toast.loading("Preparing file upload", {
+                duration: 2000
+            });
             return { toastId: id };
         },
         onSuccess: (data, _variables, context) => {
@@ -425,6 +441,8 @@ export default function Home() {
 
 
 
+
+
     return (
         <div className="min-h-screen bg-gray-50">
             {/* Header */}
@@ -442,7 +460,7 @@ export default function Home() {
                 {/* Search and Controls */}
                 <div className="mb-8">
                     {/* Expiry Warning Banner */}
-                    {!!((expiredFiles?.length || 0) + (expiringSoonFiles?.length || 0)) && showExpiryBanner && (
+                    {!isLoadingExpiredContent && !isLoadingExpringContent && expiredFiles!.length > 0 && expiringSoonFiles!.length > 0 && showExpiryBanner && (
                         <div className="mb-4">
                             <div className="block w-full">
                                 <div className="w-full border border-red-200 bg-red-50 text-red-800 px-4 py-3 rounded-lg flex items-center justify-between cursor-pointer">
@@ -474,33 +492,52 @@ export default function Home() {
                         </div>
 
                         {/* View Controls */}
-                        <div className="flex items-center space-x-4">
+                        <div className="flex items-center justify-between space-x-4">
                             <button
-                                onClick={() => refetchFiles()}
+                                onClick={() => {
+                                    refetchFiles();
+                                    toast.loading("Refreshing files", {
+                                        duration: 2000
+                                    })
+                                }}
                                 disabled={isLoadingFiles}
-                                className="p-2 text-gray-500 hover:text-gray-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                                className="cursor-pointer p-2 text-gray-500 hover:text-gray-700 disabled:opacity-50 disabled:cursor-not-allowed"
                                 title="Refresh files"
                             >
                                 🔄
                             </button>
+                            {folderId && <button
+                                onClick={() => router.push('/')}
+                                className="hidden md:block px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors cursor-pointer"
+                                title="Back to Root"
+                            >
+                                ← Back to Root
+                            </button>}
+                            {folderId && <button
+                                onClick={() => router.push('/')}
+                                className="block md:hidden px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors cursor-pointer"
+                                title="Back to Root"
+                            >
+                                Back
+                            </button>}
                             <div className="flex items-center bg-white border border-gray-300 rounded-lg p-1">
                                 <button
                                     onClick={() => setViewMode('grid')}
-                                    className={`p-2 rounded-md ${viewMode === 'grid'
-                                        ? 'bg-blue-100 text-blue-600'
+                                    className={`cursor-pointer px-3 py-2 text-sm font-medium rounded-md transition-colors ${viewMode === 'grid'
+                                        ? 'bg-blue-100 text-blue-700'
                                         : 'text-gray-500 hover:text-gray-700'
                                         }`}
                                 >
-                                    ⬜
+                                    Grid
                                 </button>
                                 <button
                                     onClick={() => setViewMode('list')}
-                                    className={`p-2 rounded-md ${viewMode === 'list'
-                                        ? 'bg-blue-100 text-blue-600'
+                                    className={`cursor-pointer px-3 py-2 text-sm font-medium rounded-md transition-colors ${viewMode === 'list'
+                                        ? 'bg-blue-100 text-blue-700'
                                         : 'text-gray-500 hover:text-gray-700'
                                         }`}
                                 >
-                                    ☰
+                                    List
                                 </button>
                             </div>
                         </div>
