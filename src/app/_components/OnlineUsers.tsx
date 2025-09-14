@@ -123,5 +123,5 @@ function formatLastSeen(date: Date): string {
   if (diff < oneDay) {
     return getTimeAgo(new Date(date));
   }
-  return new Date(date).toLocaleString();
+  return new Date(date).toLocaleDateString("en-IN");
 }
