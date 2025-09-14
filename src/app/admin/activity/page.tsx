@@ -127,11 +127,27 @@ export default function AdminActivityPage() {
         onSignOut={() => signOut()}
       />
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        <div className="mb-8">
-          <h1 className="text-3xl font-bold text-gray-900">Employee Activity Logs</h1>
-          <p className="mt-2 text-gray-600">
-            Monitor all employee activities across the system
-          </p>
+        <div className="flex justify-between items-center">
+          <div className="mb-8">
+            <h1 className="text-3xl font-bold text-gray-900">Employee Activity Logs</h1>
+            <p className="mt-2 text-gray-600 hidden md:block">
+              Monitor all employee activities across the system
+            </p>
+          </div>
+          <button
+            onClick={() => router.push('/')}
+            className="hidden md:block px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors cursor-pointer"
+            title="Back to Root"
+          >
+            ← Back to Root
+          </button>
+          <button
+            onClick={() => router.push('/')}
+            className="md:hidden sm:block px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors cursor-pointer"
+            title="Back to Root"
+          >
+            Back
+          </button>
         </div>
 
         {/* Online Users */}
@@ -235,13 +251,13 @@ function AllActivitiesAccordion() {
               <div className="text-xl font-bold text-gray-900">
                 All Activities
               </div>
-              <div className="text-sm text-gray-500">
+              <div className="text-sm text-gray-500 hidden md:block">
                 View all employee activities across the system
               </div>
             </div>
           </div>
           <div className="flex items-center">
-            <span className="text-sm text-gray-500 mr-2">
+            <span className="text-sm text-gray-500 mr-2 hidden md:block">
               {isExpanded ? `${allActivityLogs?.length || 0} total activities` : "Click to view all activities"}
             </span>
             {isExpanded ? (
@@ -489,9 +505,6 @@ function EmployeeAccordion({
                         <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                           User Agent
                         </th>
-                        <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                          Details
-                        </th>
                       </tr>
                     </thead>
                     <tbody className="bg-white divide-y divide-gray-200">
@@ -508,6 +521,16 @@ function EmployeeAccordion({
                             </div>
                             <div className="text-sm text-gray-500">
                               {log.file.type}
+                              {log.action === "UPDATE_EXPIRY" && (
+                                <div className="space-y-1">
+                                  <div>
+                                    <span className="text-gray-500">Previous: </span>
+                                    <span>{log.previousExpiry ? new Date(log.previousExpiry as unknown as string).toLocaleDateString("en-IN") : "N/A"}</span>
+                                    <span className="text-gray-500 ml-4">New: </span>
+                                    <span>{log.file?.expiryDate ? new Date(log.file.expiryDate as unknown as string).toLocaleDateString("en-IN") : "N/A"}</span>
+                                  </div>
+                                </div>
+                              )}
                             </div>
                           </td>
                           <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-900">
@@ -515,22 +538,6 @@ function EmployeeAccordion({
                           </td>
                           <td className="px-4 py-3 text-sm text-gray-500 max-w-xs truncate">
                             {log.userAgent || "N/A"}
-                          </td>
-                          <td className="px-4 py-3 text-sm text-gray-700">
-                            {log.action === "UPDATE_EXPIRY" ? (
-                              <div className="space-y-1">
-                                <div>
-                                  <span className="text-gray-500">Previous: </span>
-                                  <span>{log.previousExpiry ? new Date(log.previousExpiry as unknown as string).toLocaleDateString("en-IN") : "N/A"}</span>
-                                </div>
-                                <div>
-                                  <span className="text-gray-500">New: </span>
-                                  <span>{log.file?.expiryDate ? new Date(log.file.expiryDate as unknown as string).toLocaleDateString("en-IN") : "N/A"}</span>
-                                </div>
-                              </div>
-                            ) : (
-                              <span className="text-gray-400">-</span>
-                            )}
                           </td>
                         </tr>
                       ))}
